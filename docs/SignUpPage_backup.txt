@@ -1,0 +1,528 @@
+﻿import { useState, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  CheckCircle2, 
+  AlertCircle, 
+  Shield, 
+  Calendar, 
+  Check, 
+  Hash
+} from 'lucide-react';
+import { IcmuSmallLogo, IcmuEmblem } from '../components/common/IcmuEmblem';
+import { useAppDispatch } from '../store/hooks';
+import { submitApplication } from '../store/slices/applicationSlice';
+import { addToast } from '../store/slices/uiSlice';
+import { getBatchYear, getBatchYearSuffix } from '../utils/batch-year';
+import { sanitizeMemberInput, coerceE164, stripHtml, trimAndClean, toTitleCase } from '../utils/sanitize';
+import { memberRegistrationSchema } from '../validation/schemas';
+import { useCreateMember } from '../hooks/useMembers';
+import { useSkills } from '../hooks/useSkills';
+import { MIN_INDEX_NUMBER, MAX_INDEX_NUMBER } from '../constants';
+
+export default function SignUpPage() {
+    const dispatch = useAppDispatch();
+  const createMemberMutation = useCreateMember();
+
+  const { data: skillsData, isLoading: skillsLoading } = useSkills();
+  const [activeStep, setActiveStep] = useState(1);
+  const [submitted, setSubmitted] = useState(false);
+  const [generatedMemberRecord, setGeneratedMemberRecord] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const [formData, setFormData] = useState({
+    index_number: '',
+    full_name: '',
+    name_with_initials: '',
+    date_of_birth: '2008-04-15',
+    joined_date: new Date().toISOString().split('T')[0],
+    city: 'Colombo 05',
+    whatsapp_number: '',
+    email_address: '',
+    guardian_name: '',
+    guardian_occupation: '',
+    guardian_contact: '',
+      skills: [],
+  });
+
+  const batchYearInfo = useMemo(() => {
+    if (!formData.date_of_birth) return null;
+    const year = getBatchYear(formData.date_of_birth);
+    const suffix = getBatchYearSuffix(formData.date_of_birth);
+    const dobMonth = new Date(formData.date_of_birth).getMonth() + 1;
+    const isJanuary = dobMonth === 1;
+
+    return {
+      batchYear: year,
+      suffix,
+      prefix: `${suffix}M`,
+      isJanuary,
+    };
+  }, [formData.date_of_birth]);
+
+  const coercedMemberPhone = useMemo(() => {
+    return coerceE164(formData.whatsapp_number);
+  }, [formData.whatsapp_number]);
+
+  const coercedGuardianPhone = useMemo(() => {
+    return coerceE164(formData.guardian_contact);
+  }, [formData.guardian_contact]);
+
+  const handleChange = (field, value) => {
+    let sanitizedVal = value;
+    if (field === 'index_number') {
+      sanitizedVal = value.replace(/[^0-9]/g, '');
+    } else if (field === 'email_address') {
+      sanitizedVal = value.toLowerCase();
+    }
+
+    setFormData((prev) => ({ ...prev, [field]: sanitizedVal }));
+
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
+  const handleBlur = (field) => {
+    setFormData((prev) => {
+      let val = prev[field];
+      if (typeof val !== 'string') return prev;
+      if (['full_name', 'name_with_initials', 'guardian_name', 'guardian_occupation'].includes(field)) {
+        val = trimAndClean(stripHtml(val));
+      } else if (field === 'city') {
+        val = toTitleCase(trimAndClean(stripHtml(val)));
+      } else if (field === 'email_address') {
+        val = val.trim().toLowerCase();
+      } else if (field === 'whatsapp_number' || field === 'guardian_contact') {
+        val = coerceE164(val);
+      }
+      return { ...prev, [field]: val };
+    });
+  };
+
+  const toggleSkill = (skill) => {
+    setFormData((prev) => {
+      const exists = prev.skills.includes(skill);
+      const updated = exists
+        ? prev.skills.filter((s) => s !== skill)
+        : [...prev.skills, skill];
+      return { ...prev, skills: updated };
+    });
+  };
+
+  const validateStep = (step) => {
+    const newErrors = {};
+
+    if (step === 1) {
+      if (!formData.index_number.trim()) newErrors.index_number = 'Student Index Number is required.';
+      else if (!/^\d+$/.test(formData.index_number) || parseInt(formData.index_number, 10) < MIN_INDEX_NUMBER || parseInt(formData.index_number, 10) > MAX_INDEX_NUMBER) newErrors.index_number = `Index number must be between ${MIN_INDEX_NUMBER} and ${MAX_INDEX_NUMBER}.`;
+      
+      if (!formData.full_name.trim() || formData.full_name.trim().length < 3) newErrors.full_name = 'Full name must be at least 3 characters.';
+      if (!formData.name_with_initials.trim() || formData.name_with_initials.trim().length < 2) newErrors.name_with_initials = 'Name with initials is required (e.g. K. T. Perera).';
+      if (!formData.date_of_birth) newErrors.date_of_birth = 'Date of birth is required.';
+      
+      if (!formData.whatsapp_number.trim()) newErrors.whatsapp_number = 'WhatsApp phone number is required.';
+      else if (!/^\+[1-9]\d{1,14}$/.test(coercedMemberPhone)) newErrors.whatsapp_number = 'Must be a valid phone number (e.g. 077 123 4567 or +94771234567).';
+      
+      if (!formData.email_address.trim()) newErrors.email_address = 'Email address is required.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email_address)) newErrors.email_address = 'Invalid email address format.';
+    } else if (step === 2) {
+      if (!formData.guardian_name.trim() || formData.guardian_name.trim().length < 2) newErrors.guardian_name = 'Guardian / Parent full name is required.';
+      if (!formData.guardian_contact.trim()) newErrors.guardian_contact = 'Guardian contact number is required.';
+      else if (!/^\+[1-9]\d{1,14}$/.test(coercedGuardianPhone)) newErrors.guardian_contact = 'Must be a valid contact phone number.';
+    } else if (step === 3) {
+      if (!formData.skills || formData.skills.length === 0) newErrors.skills = 'Please select at least one relevant skill.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNextStep = () => {
+    if (validateStep(activeStep)) {
+      setActiveStep((prev) => Math.min(prev + 1, 3));
+    }
+  };
+
+  const handlePrevStep = () => {
+    setActiveStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
+      dispatch(addToast({
+        message: 'Please complete all steps and fix validation errors.',
+        type: 'error',
+      }));
+      return;
+    }
+
+    const rawPayload = {
+      index_number: formData.index_number,
+      full_name: formData.full_name,
+      name_with_initials: formData.name_with_initials,
+      date_of_birth: formData.date_of_birth,
+      joined_date: formData.joined_date,
+      city: formData.city || 'Colombo',
+      whatsapp_number: coercedMemberPhone,
+      email_address: formData.email_address,
+      guardian: {
+        guardian_name: trimAndClean(stripHtml(formData.guardian_name)),
+        occupation: trimAndClean(formData.guardian_occupation) || 'Not Specified',
+        contact_number: coercedGuardianPhone,
+      },
+    };
+
+    const sanitizedPayload = sanitizeMemberInput(rawPayload);
+
+    const validationResult = memberRegistrationSchema.safeParse(sanitizedPayload);
+    if (!validationResult.success) {
+      const formattedErrors = {};
+      validationResult.error.errors.forEach((err) => {
+        const path = err.path.join('.');
+        formattedErrors[path] = err.message;
+      });
+      setErrors(formattedErrors);
+      dispatch(addToast({
+        message: 'Please review and fix validation errors in the form.',
+        type: 'error',
+      }));
+      return;
+    }
+
+    try {
+      await createMemberMutation.mutateAsync({
+        ...sanitizedPayload,
+        batch_year: batchYearInfo?.batchYear,
+        skills: formData.skills,
+        guardian: sanitizedPayload.guardian,
+      });
+    } catch (err) {
+      console.warn('[Registration] Could not submit to Supabase:', err.message);
+      dispatch(addToast({
+        message: 'Could not submit application. Please check your connection.',
+        type: 'error',
+      }));
+      return;
+    }
+
+    const completedRecord = {
+      member_id: 'PENDING',
+      index_number: sanitizedPayload.index_number,
+      full_name: sanitizedPayload.full_name,
+      name_with_initials: sanitizedPayload.name_with_initials,
+      batch_year: batchYearInfo?.batchYear,
+      skills: formData.skills.map(id => skillsData?.find(s => s.id === id)?.skill_name || id),
+      whatsapp_number: sanitizedPayload.whatsapp_number,
+      guardian_name: formData.guardian_name,
+      joined_date: sanitizedPayload.joined_date,
+    };
+
+    setGeneratedMemberRecord(completedRecord);
+    dispatch(submitApplication(completedRecord));
+    setSubmitted(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="min-h-screen bg-[#080d0a] text-gray-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-200">
+      
+      <header className="sticky top-0 z-40 bg-[#080d0a]/90 backdrop-blur-md border-b border-gray-800 px-4 h-14">
+        <div className="max-w-5xl mx-auto h-full flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5">
+            <IcmuSmallLogo className="w-6 h-6" />
+            <span className="font-semibold text-sm text-white">Isipathana Media Unit</span>
+          </Link>
+          <Link to="/" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-700 hover:border-gray-500 text-xs text-gray-300 hover:text-white transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back</span>
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-8 sm:py-12 relative">
+        <div className="bg-[#0c130f] border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          
+          <div className="text-center mb-8 relative z-10">
+            <div className="flex justify-center mb-4">
+              <IcmuEmblem className="w-14 h-14" glow={!submitted} />
+            </div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              Member Registration
+            </h1>
+            <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
+              Please enter your details carefully. Your information will be mapped into the database according to the 2026 spec.
+            </p>
+          </div>
+
+          <div className="relative">
+            {submitted && generatedMemberRecord ? (
+              <div className="py-6 text-center space-y-6 relative z-10 animate-in fade-in duration-300">
+                <div className="w-16 h-16 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Application Submitted!</h2>
+                  <p className="text-xs text-gray-400 mt-1">Your registration has been submitted and is currently pending review by an admin.</p>
+                </div>
+
+                <div className="max-w-md mx-auto bg-[#080d0a] border border-emerald-900/60 rounded-xl p-5 text-left shadow-lg">
+                  <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <IcmuSmallLogo className="w-5 h-5" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">ICMU Member Card</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800/60">
+                      PENDING
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase">Application Status</span>
+                      <span className="text-lg font-mono font-bold text-amber-400 tracking-wider">
+                        {generatedMemberRecord.member_id}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase">School Index</span>
+                      <span className="font-semibold text-white">{generatedMemberRecord.index_number}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase">Member Name</span>
+                      <span className="font-medium text-gray-200">{generatedMemberRecord.name_with_initials}</span>
+                    </div>
+                    <div>
+                        <span className="text-[10px] text-gray-500 block uppercase">School Batch</span>
+                      <span className="font-medium text-gray-300">Batch {generatedMemberRecord.batch_year}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase">WhatsApp Contact</span>
+                      <span className="font-mono text-gray-300">{generatedMemberRecord.whatsapp_number}</span>
+                    </div>
+                  </div>
+                  {generatedMemberRecord.skills?.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-800/80">
+                      <span className="text-[10px] text-gray-500 block uppercase mb-1.5">Registered Skills</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {generatedMemberRecord.skills.map((s) => (
+                          <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[#111a14] border border-gray-800 text-gray-300">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6">
+                  <button
+                    onClick={() => {
+                      setSubmitted(false);
+                      setGeneratedMemberRecord(null);
+                      setActiveStep(1);
+                      setFormData({
+                        index_number: '', full_name: '', name_with_initials: '', date_of_birth: '2008-04-15',
+                        joined_date: new Date().toISOString().split('T')[0], city: 'Colombo 05', whatsapp_number: '', email_address: '',
+                        guardian_name: '', guardian_occupation: '', guardian_contact: '',
+      skills: [],
+                      });
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-md border border-gray-700 hover:border-gray-500 text-gray-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Submit Another Application
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+                
+                <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                  <button type="button" onClick={() => setActiveStep(1)} className={`flex items-center gap-2 text-xs font-medium transition-colors cursor-pointer ${activeStep === 1 ? 'text-emerald-400' : 'text-gray-400 hover:text-gray-200'}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${activeStep === 1 ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'}`}>1</span>
+                    <span>Student Info</span>
+                  </button>
+                  <div className="w-8 h-px bg-gray-800" />
+                  <button type="button" onClick={() => validateStep(1) && setActiveStep(2)} className={`flex items-center gap-2 text-xs font-medium transition-colors cursor-pointer ${activeStep === 2 ? 'text-emerald-400' : 'text-gray-400 hover:text-gray-200'}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${activeStep === 2 ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'}`}>2</span>
+                    <span>Guardian</span>
+                  </button>
+                  <div className="w-8 h-px bg-gray-800" />
+                  <button type="button" onClick={() => validateStep(1) && validateStep(2) && setActiveStep(3)} className={`flex items-center gap-2 text-xs font-medium transition-colors cursor-pointer ${activeStep === 3 ? 'text-emerald-400' : 'text-gray-400 hover:text-gray-200'}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${activeStep === 3 ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'}`}>3</span>
+                    <span>Skills</span>
+                  </button>
+                </div>
+
+                {activeStep === 1 && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    {batchYearInfo && (
+                      <div className="p-3.5 rounded-lg bg-emerald-950/40 border border-emerald-800/60 flex items-start gap-3">
+                        <Calendar className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <div className="text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-emerald-300">Academic Batch Year: {batchYearInfo.batchYear}</span>
+                            {batchYearInfo.isJanuary && <span className="bg-emerald-900 text-emerald-200 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider">Jan Intake</span>}
+                          </div>
+                          <p className="text-emerald-400/80 mt-1">Calculated via Spec 4.1 rule (DOB: {formData.date_of_birth}). Member ID prefix will be <code className="font-mono bg-emerald-950 px-1 rounded">{batchYearInfo.prefix}</code>.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">Index Number <span className="text-rose-400">*</span></label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Hash className="h-4 w-4 text-gray-500" />
+                          </div>
+                          <input type="text" value={formData.index_number} onChange={(e) => handleChange('index_number', e.target.value)} onBlur={() => handleBlur('index_number')} className={`w-full pl-9 pr-3 py-2 text-xs bg-[#080d0a] border ${errors.index_number ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. 19482" />
+                        </div>
+                        {errors.index_number && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.index_number}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">Date of Birth <span className="text-rose-400">*</span></label>
+                        <input type="date" value={formData.date_of_birth} onChange={(e) => handleChange('date_of_birth', e.target.value)} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.date_of_birth ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} />
+                        {errors.date_of_birth && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.date_of_birth}</p>}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Full Name <span className="text-rose-400">*</span></label>
+                      <input type="text" value={formData.full_name} onChange={(e) => handleChange('full_name', e.target.value)} onBlur={() => handleBlur('full_name')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.full_name ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. Kasun Tharaka Perera" />
+                      {errors.full_name && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.full_name}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Name with Initials <span className="text-rose-400">*</span></label>
+                      <input type="text" value={formData.name_with_initials} onChange={(e) => handleChange('name_with_initials', e.target.value)} onBlur={() => handleBlur('name_with_initials')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.name_with_initials ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. K. T. Perera" />
+                      {errors.name_with_initials && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.name_with_initials}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">WhatsApp Number <span className="text-rose-400">*</span></label>
+                        <input type="tel" value={formData.whatsapp_number} onChange={(e) => handleChange('whatsapp_number', e.target.value)} onBlur={() => handleBlur('whatsapp_number')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.whatsapp_number ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. 077 123 4567" />
+                        {errors.whatsapp_number && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.whatsapp_number}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">Email Address <span className="text-rose-400">*</span></label>
+                        <input type="email" value={formData.email_address} onChange={(e) => handleChange('email_address', e.target.value)} onBlur={() => handleBlur('email_address')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.email_address ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. kasun@gmail.com" />
+                        {errors.email_address && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email_address}</p>}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">City <span className="text-gray-500 font-normal">(Optional)</span></label>
+                      <input type="text" value={formData.city} onChange={(e) => handleChange('city', e.target.value)} onBlur={() => handleBlur('city')} className="w-full px-3 py-2 text-xs bg-[#080d0a] border border-gray-800 focus:border-emerald-500 rounded-md text-white focus:outline-none transition-colors" placeholder="e.g. Colombo 05" />
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t border-gray-800/80">
+                      <button type="button" onClick={handleNextStep} className="px-5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors cursor-pointer">
+                        Continue to Guardian &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeStep === 2 && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="p-3 rounded-lg bg-gray-900/60 border border-gray-800 text-xs text-gray-400 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Guardian details establish the Many-to-One relationship for parent approval and emergency communications.</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Guardian Full Name <span className="text-rose-400">*</span></label>
+                      <input type="text" value={formData.guardian_name} onChange={(e) => handleChange('guardian_name', e.target.value)} onBlur={() => handleBlur('guardian_name')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.guardian_name ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. Sunil Perera" />
+                      {errors.guardian_name && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.guardian_name}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Guardian Contact Number <span className="text-rose-400">*</span></label>
+                      <input type="tel" value={formData.guardian_contact} onChange={(e) => handleChange('guardian_contact', e.target.value)} onBlur={() => handleBlur('guardian_contact')} className={`w-full px-3 py-2 text-xs bg-[#080d0a] border ${errors.guardian_contact ? 'border-rose-500/50 focus:border-rose-500' : 'border-gray-800 focus:border-emerald-500'} rounded-md text-white focus:outline-none transition-colors`} placeholder="e.g. 077 123 4567" />
+                      {errors.guardian_contact && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.guardian_contact}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Guardian Occupation <span className="text-gray-500 font-normal">(Optional)</span></label>
+                      <input type="text" value={formData.guardian_occupation} onChange={(e) => handleChange('guardian_occupation', e.target.value)} onBlur={() => handleBlur('guardian_occupation')} className="w-full px-3 py-2 text-xs bg-[#080d0a] border border-gray-800 focus:border-emerald-500 rounded-md text-white focus:outline-none transition-colors" placeholder="e.g. Engineer" />
+                    </div>
+
+                    <div className="flex justify-between pt-4 border-t border-gray-800/80">
+                      <button type="button" onClick={handlePrevStep} className="px-4 py-2 rounded-md border border-gray-700 hover:border-gray-500 text-gray-300 text-xs font-medium transition-colors cursor-pointer">
+                        &larr; Back
+                      </button>
+                      <button type="button" onClick={handleNextStep} className="px-5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors cursor-pointer">
+                        Continue to Skills &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeStep === 3 && (
+                  <div className="space-y-5 animate-in fade-in duration-200">
+                    
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-gray-300">Select Relevant Skills Possessed <span className="text-rose-400">*</span></label>
+                        <span className="text-[10px] text-gray-500">{formData.skills.length} selected</span>
+                      </div>
+                      {skillsLoading ? (
+                        <div className="text-xs text-gray-500 animate-pulse">Loading skills...</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(skillsData || []).filter(s => s.is_active !== false).map((skill) => {
+                            const selected = formData.skills.includes(skill.id);
+                            return (
+                              <button
+                                key={skill.id}
+                                type="button"
+                                onClick={() => toggleSkill(skill.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] transition-colors cursor-pointer ${selected ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm' : 'bg-[#080d0a] border-gray-800 text-gray-400 hover:border-gray-600 hover:text-gray-200'}`}
+                              >
+                                {selected && <Check className="w-3 h-3" />}
+                                {skill.skill_name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {errors.skills && <p className="mt-1 text-[10px] text-rose-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.skills}</p>}
+                    </div>
+
+                    <div className="flex justify-between pt-4 border-t border-gray-800/80 mt-8">
+                      <button type="button" onClick={handlePrevStep} className="px-4 py-2 rounded-md border border-gray-700 hover:border-gray-500 text-gray-300 text-xs font-medium transition-colors cursor-pointer">
+                        &larr; Back
+                      </button>
+                      <button type="submit" disabled={createMemberMutation.isPending} className="flex items-center gap-2 px-6 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        {createMemberMutation.isPending ? 'Submitting...' : 'Submit Registration'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
+            )}
+          </div>
+        </div>
+      </main>
+
+      <footer className="py-4 text-center text-xs text-gray-500 border-t border-gray-800/60">
+        &copy; {new Date().getFullYear()} Isipathana College Media Unit | Database Specification & Batch Year Protocol Active
+      </footer>
+    </div>
+  );
+}
+
+
+
+
+
+
+
