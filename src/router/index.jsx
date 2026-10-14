@@ -40,7 +40,7 @@ export const routes = [
         element: <MemberDashboard />
       },
       {
-        path: 'admin',
+        path: 'admin/*',
         element: <AdminPage />,
       },
       {

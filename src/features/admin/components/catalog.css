@@ -1,0 +1,71 @@
+.admin-workspace .adm-catalog { display: grid; gap: 24px; min-width: 0; }
+.admin-workspace .adm-catalog-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.admin-workspace .adm-catalog-top h2 { color: #f2f7f3; font-size: 28px; font-weight: 600; letter-spacing: -.035em; margin: 8px 0; }
+.admin-workspace .adm-catalog-top p, .admin-workspace .adm-catalog-hint { color: #98aaa0; font-size: 13px; line-height: 1.6; max-width: 560px; }
+.admin-workspace .adm-catalog-eyebrow { color: #72c994; font-size: 11px; font-weight: 600; letter-spacing: .12em; }
+.admin-workspace .adm-catalog button { min-height: 44px; }
+.admin-workspace .adm-catalog-toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+.admin-workspace .adm-catalog-search { flex: 1 1 220px; max-width: 360px; }
+.admin-workspace .adm-catalog-filters { display: flex; border: 1px solid #25382d; padding: 4px; border-radius: 16px; gap: 4px; }
+.admin-workspace .adm-catalog-filters button { display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; color: #9daea4; font-size: 12px; border-radius: 12px; cursor: pointer; transition: background .18s, color .18s; }
+.admin-workspace .adm-catalog-filters button[aria-pressed="true"] { color: #d0f5dc; background: #1d392a; }
+.admin-workspace .adm-catalog-filters span { font-variant-numeric: tabular-nums; font-size: 11px; opacity: .75; }
+.admin-workspace .adm-catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.admin-workspace .adm-catalog-card { display: flex; flex-direction: column; min-width: 0; padding: 24px; border-radius: 24px; border: 1px solid #23362b; background: #111d16; }
+.admin-workspace .adm-catalog-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.admin-workspace .adm-catalog-symbol { display: grid; width: 44px; height: 44px; border-radius: 14px; place-items: center; background: #1b3224; color: #94d5ac; }
+.admin-workspace .adm-catalog-status { display: inline-flex; align-items: center; gap: 6px; color: #9eddb4; font-size: 11px; }
+.admin-workspace .adm-catalog-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.admin-workspace .adm-catalog-status.is-inactive { color: #99a69e; }
+.admin-workspace .adm-catalog-card h3 { color: #eff6f1; font-size: 16px; line-height: 1.45; font-weight: 600; margin: 0 0 8px; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-count, .admin-workspace .adm-catalog-description { color: #99aba0; font-size: 13px; line-height: 1.6; margin: 0; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-count strong { color: #e6f0e9; font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-workspace .adm-catalog-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; min-height: 64px; padding: 16px 0; }
+.admin-workspace .adm-catalog-tags span { padding: 4px 8px; border-radius: 8px; background: #1b2c21; color: #a6bfae; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-tags .is-empty { background: transparent; padding-left: 0; color: #91a098; }
+.admin-workspace .adm-catalog-card-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding-top: 16px; border-top: 1px solid #27352c; margin-top: auto; }
+.admin-workspace .adm-catalog-utilities { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; width: 100%; }
+.admin-workspace .adm-catalog-utilities button { padding-left: 8px; padding-right: 8px; font-size: 11px; gap: 6px; }
+.admin-workspace .adm-catalog-protected { display: inline-flex; gap: 6px; align-items: center; color: #9cb0a3; font-size: 11px; min-height: 44px; }
+.admin-workspace .adm-catalog-skills .adm-catalog-description { padding-bottom: 24px; }
+.admin-workspace .adm-catalog-footnote { display: flex; align-items: flex-start; gap: 8px; color: #95a69b; font-size: 11px; line-height: 1.7; }
+.admin-workspace .adm-catalog-footnote svg { flex-shrink: 0; margin-top: 3px; }
+.admin-workspace .adm-catalog-state { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; min-height: 160px; padding: 32px 16px; color: #9caf9f; font-size: 13px; line-height: 1.6; }
+.admin-workspace .adm-catalog-state strong { color: #eef5ef; font-weight: 600; }
+.admin-workspace .adm-catalog-spinner { width: 20px; height: 20px; border: 2px solid #324c3a; border-top-color: #85d5a3; border-radius: 50%; animation: catalog-spin .7s linear infinite; }
+.admin-workspace .adm-catalog-form, .admin-workspace .adm-catalog-roster { display: grid; gap: 20px; }
+.admin-workspace .adm-catalog-form button, .admin-workspace .adm-catalog-roster button { min-height: 44px; }
+.admin-workspace .adm-catalog-fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.admin-workspace .adm-catalog-fieldset legend { color: #dcebe0; font-size: 13px; margin-bottom: 12px; }
+.admin-workspace .adm-catalog-fieldset legend span { color: #95a69b; margin-left: 8px; font-size: 11px; }
+.admin-workspace .adm-catalog-skill-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px; border: 1px solid #2c3c31; border-radius: 16px; max-height: 260px; overflow-y: auto; }
+.admin-workspace .adm-catalog-skill-picker label { min-height: 44px; }
+.admin-workspace .adm-catalog-skill-picker button { min-height: 20px; }
+.admin-workspace .adm-catalog-error { padding: 12px 16px; border-radius: 12px; border: 1px solid #764040; background: #341e20; color: #ffcaca; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-error button { text-decoration: underline; cursor: pointer; }
+.admin-workspace .adm-catalog-roster-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.admin-workspace .adm-catalog-roster h3 { font-size: 16px; font-weight: 600; color: #eaf3ee; }
+.admin-workspace .adm-catalog-member-list { display: grid; }
+.admin-workspace .adm-catalog-member { display: flex; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid #29372e; min-width: 0; }
+.admin-workspace .adm-catalog-member > div { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.admin-workspace .adm-catalog-member strong { color: #e9f1eb; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-member > div > span { color: #9bae9f; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.admin-workspace .adm-catalog-member > button { flex-shrink: 0; padding-left: 12px; padding-right: 12px; font-size: 12px; }
+.admin-workspace .adm-catalog-avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 14px; flex-shrink: 0; color: #a6dab8; background: #233c2a; font-size: 14px; font-weight: 600; }
+.admin-workspace .adm-catalog-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #9bae9f; font-size: 11px; }
+.admin-workspace .adm-catalog-pagination > div { display: flex; gap: 8px; }
+.admin-workspace .adm-catalog-pagination button { width: 44px; padding: 0; }
+@keyframes catalog-spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+  .admin-workspace .adm-catalog-top { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .admin-workspace .adm-catalog-top h2 { font-size: 24px; }
+  .admin-workspace .adm-catalog-top > button { width: 100%; }
+  .admin-workspace .adm-catalog-search { max-width: none; flex-basis: 100%; }
+  .admin-workspace .adm-catalog-filters { width: 100%; }
+  .admin-workspace .adm-catalog-filters button { flex: 1; justify-content: center; padding: 0 8px; }
+  .admin-workspace .adm-catalog-card { padding: 20px; }
+  .admin-workspace .adm-catalog-skill-picker { grid-template-columns: 1fr; }
+  .admin-workspace .adm-catalog-member { gap: 8px; }
+  .admin-workspace .adm-catalog-avatar { width: 32px; height: 32px; border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .admin-workspace .adm-catalog-spinner { animation: none; } }

@@ -1,57 +1,48 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase.js';
-import { DEFAULT_SKILLS } from '../constants.js';
 
-export const useSkills = () => {
-  return useQuery({
-    queryKey: ['skills'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('skill')
-        .select('*')
-        .order('skill_name');
-      if (error) throw error;
+// Only persisted catalog rows may be assigned to members or teams.
+export const useSkills = () => useQuery({
+  queryKey: ['skills'],
+  queryFn: async ({ signal }) => {
+    const { data, error } = await supabase.from('skill')
+      .select('id, skill_name, skill_desc, is_active, is_protected')
+      .order('is_protected', { ascending: false }).order('skill_name')
+      .abortSignal(signal);
+    if (error) throw error;
+    return data || [];
+  },
+});
 
-      // Merge default protected skills with DB data.
-      // If a default skill already exists in the DB, use the DB version.
-      // If it doesn't exist yet, insert it as a placeholder so it always renders.
-      const dbSkillNames = new Set(
-        (data || []).map(s => s.skill_name.toLowerCase())
-      );
-
-      const missingDefaults = DEFAULT_SKILLS
-        .filter(ds => !dbSkillNames.has(ds.skill_name.toLowerCase()))
-        .map((ds) => ({
-          // Use a deterministic placeholder id so React keys stay stable
-          id: `default-${ds.skill_name.toLowerCase().replace(/\s+/g, '-')}`,
-          ...ds,
-          _isLocalDefault: true, // flag to know this hasn't been persisted yet
-        }));
-
-      // Ensure protected defaults always appear first, then the rest sorted
-      const merged = [...data || []];
-      merged.push(...missingDefaults);
-
-      // Sort: protected first, then alphabetical
-      merged.sort((a, b) => {
-        if (a.is_protected && !b.is_protected) return -1;
-        if (!a.is_protected && b.is_protected) return 1;
-        return (a.skill_name || '').localeCompare(b.skill_name || '');
-      });
-
-      return merged;
-    }
-  });
-};
+function skillPayload(payload) {
+  const result = {};
+  if ('skill_name' in payload) {
+    result.skill_name = payload.skill_name.trim();
+    if (!result.skill_name || result.skill_name.length > 50) throw new Error('Use a skill name between 1 and 50 characters.');
+  }
+  if ('skill_desc' in payload) {
+    result.skill_desc = (payload.skill_desc || '').trim();
+    if (result.skill_desc.length > 50) throw new Error('Keep the description within 50 characters.');
+  }
+  if (typeof payload.is_active === 'boolean') result.is_active = payload.is_active;
+  return result;
+}
 
 export const useCreateSkill = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload) => {
-      const { error } = await supabase.from('skill').insert(payload);
+      const values = skillPayload(payload);
+      if (!values.skill_name) throw new Error('A skill name is required.');
+      const { data, error } = await supabase.from('skill')
+        .insert({ ...values, is_active: true, is_protected: false }).select().single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] })
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['skills'] }),
+      qc.invalidateQueries({ queryKey: ['admin-analytics'] }),
+    ]),
   });
 };
 
@@ -59,45 +50,17 @@ export const useUpdateSkill = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...payload }) => {
-      const { error } = await supabase.from('skill').update(payload).eq('id', id);
+      // Returning the row prevents a denied/zero-row update looking successful.
+      const { data, error } = await supabase.from('skill')
+        .update(skillPayload(payload)).eq('id', id).select().single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] })
-  });
-};
-
-export const useDeleteSkill = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from('skill').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] })
-  });
-};
-
-/**
- * Hook to seed default protected skills into the DB if they don't exist yet.
- * Call this once from AdminPage or an app-level effect.
- */
-export const useSeedDefaultSkills = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      for (const ds of DEFAULT_SKILLS) {
-        // Upsert: insert if not exists, skip if already present
-        const { error } = await supabase
-          .from('skill')
-          .upsert(
-            { skill_name: ds.skill_name, skill_desc: ds.skill_desc, is_protected: true, is_active: true },
-            { onConflict: 'skill_name', ignoreDuplicates: true }
-          );
-        if (error) {
-          console.warn(`[Skills] Could not seed "${ds.skill_name}":`, error.message);
-        }
-      }
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills'] })
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['skills'] }),
+      qc.invalidateQueries({ queryKey: ['teams'] }),
+      qc.invalidateQueries({ queryKey: ['members'] }),
+      qc.invalidateQueries({ queryKey: ['admin-analytics'] }),
+    ]),
   });
 };

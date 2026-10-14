@@ -1,51 +1,30 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { createAdminAuthController, signedOutState } from '../lib/adminAuth';
 
-const AuthContext = createContext({
-  user: null,
-  isAuthenticated: false,
+export const AuthContext = createContext({
+  ...signedOutState,
   login: async () => {},
   logout: async () => {},
-  loading: true
+  refreshAccess: async () => {},
+  loading: true,
+  accessLoading: true,
 });
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [state, setState] = useState({ ...signedOutState, loading: true, accessLoading: true });
+  const [controller] = useState(() => createAdminAuthController(supabase, queryClient, setState));
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const isAuthenticated = Boolean(user);
-
-  const login = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-  };
+    controller.start();
+    return () => controller.stop();
+  }, [controller]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, logout, loading }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ ...state, login: controller.login, logout: controller.logout, refreshAccess: controller.refreshAccess }}>
+      {children}
     </AuthContext.Provider>
   );
 }
