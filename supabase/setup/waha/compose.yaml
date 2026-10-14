@@ -1,0 +1,16 @@
+# Windows testing only. Generate the adjacent .env with WAHA's init-waha first.
+name: icmu-member-waha
+
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - waha_sessions:/app/.sessions
+
+volumes:
+  waha_sessions:

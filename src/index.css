@@ -61,6 +61,12 @@
   box-sizing: border-box;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #62766b;
+  opacity: 0.65;
+}
+
 html {
   scroll-behavior: smooth;
 }

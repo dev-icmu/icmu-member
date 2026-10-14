@@ -20,7 +20,9 @@ declare
   v_baseline jsonb;
   v_summary jsonb;
   v_guardian_count bigint;
+  v_skill_count bigint;
   v_paid_at timestamptz;
+  v_job jsonb;
   v_tag text := replace(gen_random_uuid()::text, '-', '');
   v_blocked boolean;
 begin
@@ -47,11 +49,11 @@ begin
   select count(*) into v_guardian_count from public.guardian;
 
   v_payload := jsonb_build_object(
-    'full_name','Test Student '||v_tag,'name_with_initials','T. Student',
-    'date_of_birth','2012-01-31','joined_date',current_date,'index_number',null,
+    'full_name','Test Student '||v_tag,
+    'date_of_birth','2012-01-31','joined_date',current_date,'index_number','41001',
     'email_address',v_tag||'@example.invalid','whatsapp_number','+94771234567',
     'interests',jsonb_build_array(v_skill),
-    'form_number','0000-'||v_tag,'school_class','8 B','address','Test address','other_skills','Sound mixing','fee_received',true,
+    'form_number','0000','city','Colombo','fee_received',true,
     'guardian',jsonb_build_object('guardian_name','Test Guardian','contact_number','+94777654321','occupation','Test'));
 
   v_member := (public.admin_save_member(null,v_payload)->>'id')::uuid;
@@ -72,7 +74,7 @@ begin
 
   perform public.admin_save_member(v_member,jsonb_build_object('full_name','Edited Test Student','city','Colombo',
     'guardian',jsonb_build_object('guardian_name','Edited Test Guardian','contact_number','+94777654321','occupation','Updated')));
-  if not exists(select 1 from public.member m join public.guardian g on g.id=m.guardian_id where m.id=v_member and m.full_name='Edited Test Student' and g.guardian_name='Edited Test Guardian' and g.id=v_guardian) then
+  if not exists(select 1 from public.member m join public.guardian g on g.id=m.guardian_id where m.id=v_member and m.full_name='edited test student' and g.guardian_name='edited test guardian' and g.id=v_guardian) then
     raise exception 'TEST: member and guardian edit did not persist together';
   end if;
 
@@ -111,11 +113,12 @@ begin
   v_blocked := false;
   begin insert into public.member(full_name) values('Test blocked direct insert'); exception when insufficient_privilege then v_blocked := true; end;
   if not v_blocked then raise exception 'TEST: anonymous direct member INSERT remained exposed'; end if;
-  v_application := (public.submit_member_application(v_payload||jsonb_build_object('email_address',null,'membership_status','accepted','member_id','99M999','is_active',false))->>'id')::uuid;
+  v_application := (public.submit_member_application(v_payload||jsonb_build_object('email_address',null,'index_number','41002','membership_status','accepted','member_id','99M999','is_active',false,'custom_skills',jsonb_build_array('public forbidden skill')))->>'id')::uuid;
   execute 'set local role authenticated';
   if not exists(select 1 from public.member where id=v_application and membership_status='pending' and member_id is null and is_active and application_source='online' and form_number is null and fee_amount is null and fee_paid_at is null and processed_by is null) then
     raise exception 'TEST: public registration accepted privileged fields';
   end if;
+  if exists(select 1 from public.skill where skill_name='public forbidden skill') then raise exception 'TEST: public application created a catalog skill'; end if;
   perform public.admin_review_member(v_application,'rejected');
   if not exists(select 1 from public.member where id=v_application and membership_status='rejected') then raise exception 'TEST: rejection failed'; end if;
   perform public.admin_review_member(v_application,'pending');
@@ -129,10 +132,44 @@ begin
   perform public.approve_member(v_application);
 
   -- A paper application can be saved unpaid, but only approval issues its member ID.
-  v_paper := (public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001-'||v_tag,'email_address',null,'fee_received',false,'processed_by',gen_random_uuid(),'processed_by_name','Forged'))->>'id')::uuid;
-  if not exists(select 1 from public.member where id=v_paper and form_number='0001-'||v_tag and fee_amount=500 and fee_paid_at is null and membership_status='pending' and member_id is null and processed_by=v_admin and processed_by_name='Fixture Admin' and processed_at is not null) then
+  v_paper := (public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001','index_number','41003','email_address',null,'fee_received',false,'processed_by',gen_random_uuid(),'processed_by_name','Forged'))->>'id')::uuid;
+  if not exists(select 1 from public.member where id=v_paper and form_number='0001' and fee_amount=500 and fee_paid_at is null and membership_status='pending' and member_id is null and processed_by=v_admin and processed_by_name='Fixture Admin' and processed_at is not null) then
     raise exception 'TEST: new paper defaults, form number or processing audit failed';
   end if;
+
+  -- Server-side normalization and atomic, case-insensitive catalog creation.
+  perform public.admin_save_member(v_paper,jsonb_build_object('full_name','  R M P G T HASARINDA  ','city','  COLOMBO ',
+    'whatsapp_number','0701234567','other_skills','This must not be stored',
+    'guardian',jsonb_build_object('guardian_name','  UPPER Guardian ','contact_number','0094707654321','occupation',' TEACHER '),
+    'custom_skills',jsonb_build_array(' Audio   Mixing ','audio mixing','TEST SKILL '||v_tag)));
+  if not exists(select 1 from public.member m join public.guardian g on g.id=m.guardian_id where m.id=v_paper
+    and m.full_name='r m p g t hasarinda' and m.city='colombo' and m.school_class is null and m.address is null and m.name_with_initials is null and m.other_skills is null
+    and m.whatsapp_number='+94701234567' and g.guardian_name='upper guardian' and g.occupation='teacher' and g.contact_number='+94707654321') then
+    raise exception 'TEST: application text or local phone normalization failed';
+  end if;
+  if (select count(*) from public.skill where skill_name='audio mixing')<>1
+    or not exists(select 1 from public.member m join public.skill s on s.id=any(m.interests) where m.id=v_paper and s.skill_name='audio mixing')
+    or (select cardinality(interests) from public.member where id=v_paper)<>2 then
+    raise exception 'TEST: custom skill pills were not deduplicated and assigned';
+  end if;
+  select count(*) into v_skill_count from public.skill;
+  v_blocked:=false;
+  begin
+    perform public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001','index_number','41009','email_address',null,'custom_skills',jsonb_build_array('rollback skill')));
+  exception when unique_violation then v_blocked:=true; end;
+  if not v_blocked or (select count(*) from public.skill)<>v_skill_count then raise exception 'TEST: failed application left an orphan skill'; end if;
+  v_blocked:=false;
+  begin perform public.admin_save_member(v_paper,'{"fee_amount":0}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked or (select fee_amount from public.member where id=v_paper)<>500 then raise exception 'TEST: fee constant could be overridden'; end if;
+  v_blocked:=false;
+  begin perform public.admin_save_member(v_paper,'{"form_number":"1e03"}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: invalid printed digits accepted'; end if;
+  v_blocked:=false;
+  begin perform public.admin_save_member(v_paper,'{"custom_skills":[null]}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: malformed custom skill accepted'; end if;
+  v_blocked:=false;
+  begin perform private.prepare_application(null,'{}',true); exception when insufficient_privilege then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: internal prepare function exposed'; end if;
   v_blocked := false;
   begin perform public.approve_member(v_paper); exception when invalid_parameter_value then v_blocked := true; end;
   if not v_blocked or exists(select 1 from public.member where id=v_paper and (member_id is not null or approved_by is not null)) then raise exception 'TEST: unpaid paper application was approved'; end if;
@@ -143,7 +180,7 @@ begin
 
   select count(*) into v_guardian_count from public.guardian;
   v_blocked := false;
-  begin perform public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001-'||v_tag,'email_address',null)); exception when unique_violation then v_blocked:=true; end;
+  begin perform public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001','index_number','41004','email_address',null)); exception when unique_violation then v_blocked:=true; end;
   if not v_blocked or (select count(*) from public.guardian)<>v_guardian_count then raise exception 'TEST: duplicate printed form number created an orphan guardian'; end if;
 
   perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',true,'fee_paid_at','2000-01-01','approved_by_name','Forged'));
@@ -154,8 +191,51 @@ begin
   perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',false));
   if (select fee_paid_at from public.member where id=v_paper) is not null then raise exception 'TEST: explicit unpaid correction failed'; end if;
   perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',true));
-  v_member_id := public.approve_member(v_paper);
+  v_member_id := public.approve_member_with_notification(v_paper,true);
+  perform public.approve_member_with_notification(v_paper,true);
+
+  -- Approved with paid cannot be changed back to unpaid (irreversible).
+  v_blocked:=false;
+  begin perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',false)); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: approved paid member could be marked unpaid'; end if;
+
+  execute 'reset role';
+  if (select count(*) from private.whatsapp_approval_queue)<>1 then raise exception 'TEST: approval queue missing or duplicated'; end if;
+  if public.admin_whatsapp_status(v_paper)->>'status'<>'queued' then raise exception 'TEST: wrong notification status'; end if;
+  if exists(select 1 from private.whatsapp_approval_queue where member_id in(v_member,v_application)) then raise exception 'TEST: message queued without consent'; end if;
+  execute 'set local role authenticated';
+  v_blocked:=false;
+  begin perform public.claim_approval_whatsapp(); exception when insufficient_privilege then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: client could claim service queue'; end if;
+  execute 'reset role';
+  execute 'set local role service_role';
+  v_job:=public.claim_approval_whatsapp();
+  if v_job->>'member_id'<>v_member_id then raise exception 'TEST: wrong queue member'; end if;
+  if public.claim_approval_whatsapp() is not null then raise exception 'TEST: queue lease duplicated'; end if;
+  if public.finish_approval_whatsapp((v_job->>'id')::uuid,gen_random_uuid(),'submitted','wamid.fake',null) then raise exception 'TEST: wrong lease accepted'; end if;
+  if not public.finish_approval_whatsapp((v_job->>'id')::uuid,(v_job->>'claim_id')::uuid,'submitted','wamid.fixture',null) then raise exception 'TEST: delivery receipt not saved'; end if;
+  if public.finish_approval_whatsapp((v_job->>'id')::uuid,(v_job->>'claim_id')::uuid,'queued',null,null) then raise exception 'TEST: submitted message could be requeued'; end if;
+  execute 'reset role';
+  execute 'set local role authenticated';
+  if public.admin_whatsapp_status(v_paper)->>'status'<>'submitted' then raise exception 'TEST: provider acceptance status missing'; end if;
   if not exists(select 1 from public.member where id=v_paper and approved_by=v_admin and approved_by_name='Fixture Admin' and approved_at is not null and member_id=v_member_id) then raise exception 'TEST: approval audit or receipt identifier failed'; end if;
+  v_summary:=public.admin_membership_revenue('all');
+  if (v_summary->>'total')::numeric<>1000 or (v_summary->>'payments')::int<>2 then raise exception 'TEST: unpaid applications counted as revenue'; end if;
+  execute 'reset role';
+  update public.member set fee_paid_at=now()-interval '40 days',fee_amount=250 where id=v_paper;
+  if (public.admin_membership_revenue('all')->>'total')::numeric<>750 or (public.admin_membership_revenue('7d')->>'total')::numeric<>500 then raise exception 'TEST: revenue used default fee or wrong payment window'; end if;
+  update public.member set fee_paid_at=now()+interval '1 day' where id=v_paper;
+  if (public.admin_membership_revenue('all')->>'total')::numeric<>500 then raise exception 'TEST: future payment counted'; end if;
+  update public.member set fee_paid_at=(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo')-interval '1 second' where id=v_paper;
+  if (public.admin_membership_revenue('7d')->>'total')::numeric<>500 then raise exception 'TEST: payment before Colombo boundary included'; end if;
+  update public.member set fee_paid_at=fee_paid_at+interval '1 second' where id=v_paper;
+  if (public.admin_membership_revenue('7d')->>'total')::numeric<>750 then raise exception 'TEST: Colombo start date excluded'; end if;
+  update public.member set fee_paid_at=now(),fee_amount=500 where id=v_paper;
+  execute 'set local role authenticated';
+  v_blocked:=false;
+  begin perform public.admin_membership_revenue('bad'); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: invalid revenue range accepted'; end if;
+
 
   -- Legacy rows retain unknown source/fee data when edited and approved.
   execute 'reset role';
@@ -165,6 +245,28 @@ begin
   perform public.admin_save_member(v_legacy,jsonb_build_object('city','Kandy'));
   if not exists(select 1 from public.member where id=v_legacy and application_source is null and fee_amount is null and fee_paid_at is null) then raise exception 'TEST: legacy edit invented a paper fee'; end if;
   perform public.approve_member(v_legacy);
+
+  -- Period summaries use Colombo calendar boundaries and exclude future rows.
+  execute 'reset role';
+  update public.member set created_at=(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo') where id=v_member;
+  update public.member set created_at=now() where id=v_application;
+  update public.member set created_at=now()+interval '2 days' where id=v_paper;
+  execute 'set local role authenticated';
+  v_summary:=public.admin_application_activity('7d');
+  if jsonb_array_length(v_summary->'points')<>7 or (v_summary->>'has_enough_data')::boolean is not true
+    or (v_summary->>'total')::bigint<>(select count(*) from public.member where created_at>=(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo') and created_at<(((now() at time zone 'Asia/Colombo')::date+1)::timestamp at time zone 'Asia/Colombo')) then
+    raise exception 'TEST: 7-day activity boundary or total incorrect';
+  end if;
+  if jsonb_array_length(public.admin_application_activity('30d')->'points')<>30
+    or jsonb_array_length(public.admin_application_activity('6m')->'points')<>6
+    or jsonb_array_length(public.admin_application_activity('1y')->'points')<>12 then raise exception 'TEST: activity period sizes incorrect'; end if;
+  v_blocked:=false;
+  begin perform public.admin_application_activity('anything'); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: unbounded activity range accepted'; end if;
+  if (select sum((b->>'total')::int) from jsonb_array_elements(public.admin_member_batches()) b)<>(select count(*) from public.member where batch_year is not null) then raise exception 'TEST: batch summaries lost records'; end if;
+  v_blocked:=false;
+  begin perform public.admin_save_member(v_paper,'{"city":""}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: required paper city could be cleared'; end if;
 
   -- Auth expiry denies reads and cannot be bypassed by renewing the web bridge.
   execute 'reset role';
@@ -187,6 +289,12 @@ begin
   v_blocked := false;
   begin perform public.approve_member(v_application); exception when insufficient_privilege then v_blocked := true; end;
   if not v_blocked then raise exception 'TEST: unverified administrator could approve'; end if;
+  v_blocked:=false;
+  begin perform public.admin_member_batches(); exception when insufficient_privilege then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: unverified administrator could read batches'; end if;
+  v_blocked:=false;
+  begin perform public.admin_application_activity('1y'); exception when insufficient_privilege then v_blocked:=true; end;
+  if not v_blocked then raise exception 'TEST: unverified administrator could read activity'; end if;
   execute 'reset role';
   raise notice 'PASS: admin member create/edit, guardian atomicity, approval, assignment, status, activity, exact analytics and access boundaries';
 end;

@@ -38,6 +38,21 @@ const invalidLogin = await request(member, '/functions/v1/shared-admin-login', {
 assert.equal(invalidLogin.status, 401, `Configured bridge should reject invalid credentials with 401, received ${invalidLogin.status}`);
 console.log('PASS enabled login bridge rejects invalid credentials');
 
+// A missing RPC is a deployment error, not a passing authorization check.
+for (const [rpc, body] of [['admin_member_batches', {}], ['admin_membership_revenue', {p_period:'all'}], ['admin_application_activity', { p_period:'7d' }], ['claim_approval_whatsapp', {}], ['admin_whatsapp_status', {p_id:'00000000-0000-4000-8000-000000000000'}]]) {
+  const response = await request(member, `/rest/v1/rpc/${rpc}`, { method:'POST', body:JSON.stringify(body) });
+  assert.ok([401, 403].includes(response.status), `${rpc}: expected protected RPC, received ${response.status}`);
+  console.log(`PASS deployed RPC exists and denies anonymous access: ${rpc}`);
+}
+
+const deviceCheck = await request(website, '/rest/v1/rpc/register_member_device', {
+  method:'POST',body:JSON.stringify({p_session_id:'00000000-0000-4000-8000-000000000000',p_user_agent:'Unauthorized smoke test'}),
+});
+assert.ok([401,403].includes(deviceCheck.status),'Device registration must require a verified account');
+const workerCheck = await fetch(`${member.url}/functions/v1/whatsapp-approval`, {method:'POST',body:'{}',signal:AbortSignal.timeout(20000)});
+assert.equal(workerCheck.status,401,'WhatsApp worker must reject unauthenticated calls');
+console.log('PASS device registration and WhatsApp worker reject unauthenticated calls');
+
 for (const [label, config, path, options] of [
   ['website password hashes', website, '/rest/v1/users?select=password_hash&limit=0', {}],
   ['website private account profile', website, '/rest/v1/rpc/current_account_profile', { method: 'POST', body: '{}' }],

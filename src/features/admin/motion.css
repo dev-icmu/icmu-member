@@ -1,0 +1,589 @@
+.adm-loading { display:inline-flex; align-items:center; justify-content:center; gap:10px; color:var(--admin-muted); font-size:12px; }
+.adm-loading>[role=status] { color:var(--admin-accent); }
+.adm-number { font:inherit; letter-spacing:inherit; }
+.adm-page-stepper { --background:var(--admin-raised); flex:none; }
+.adm-page-stepper output { font:600 13px Montserrat,system-ui,sans-serif; }
+.adm-page-stepper button { color:var(--admin-soft); }
+.adm-pagination .adm-page-stepper { margin-left:auto; }
+.adm-table-summary { min-height:38px; }
+.adm-search-area { display:flex; align-items:center; gap:8px; width:min(460px,100%); min-width:0; }
+.adm-search-area .adm-morphing-search { flex:1; width:100%; }
+.adm-morphing-search.adm-topbar-search { padding:0; border:0; background:transparent; }
+.adm-clear-search { flex:none; font-size:11px; min-height:44px; padding:8px; color:var(--admin-soft); }
+.adm-generic-modal { width:100%; max-width:520px!important; max-height:calc(100dvh - 32px); display:flex; flex-direction:column; background:var(--admin-surface)!important; border-color:var(--admin-line)!important; }
+.adm-generic-modal.adm-generic-wide { max-width:820px!important; }
+.adm-generic-modal>.adm-dialog-header { padding:24px 24px 0; margin-bottom:18px; flex:none; }
+.adm-generic-modal>div { overflow:auto; overscroll-behavior:contain; min-height:0; padding:0 24px 24px!important; }
+.adm-generic-modal .adm-dialog-footer { position:static; background:transparent; margin:24px 0 0; }
+html.admin-route .icmu-toast-stack { font-family:Montserrat,system-ui,sans-serif; }
+html.admin-route .icmu-toast-stack>li { background:var(--admin-raised); border-color:var(--admin-line); box-shadow:0 8px 30px #0005; }
+html.admin-route [data-slot=morphing-search-dialog] input { font-size:16px; }
+@media(max-width:767px) {
+  .adm-mobile-member .adm-member-collapse { flex:1; min-width:0; }
+  .adm-mobile-member .adm-member-collapse-trigger { display:flex; width:100%; align-items:center; gap:12px; min-height:56px; padding:0; border-radius:12px; text-align:left; }
+  .adm-member-collapse-trigger>span:first-child { min-width:0; flex:1; }
+  .adm-member-collapse-trigger strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:500; }
+  .adm-member-collapse-trigger small { display:block; font-size:10px; color:var(--admin-muted); margin-top:4px; }
+  .adm-search-area { width:100%; }
+  .adm-pagination { flex-wrap:wrap; gap:8px; }
+  .adm-pagination>span { max-width:85px; line-height:1.5; }
+  .adm-page-stepper { max-width:100%; }
+  html.admin-route .icmu-toast-stack { bottom:calc(90px + env(safe-area-inset-bottom,0px)); }
+  html.admin-route .icmu-toast-stack button { min-width:44px; min-height:44px; }
+  .adm-generic-modal>.adm-dialog-header { padding:20px 18px 0; }
+  .adm-generic-modal>div { padding:0 18px 20px!important; }
+}
+
+/* High-visibility bold white text for Member ID and Index / Admission numbers */
+.adm-table-id {
+  display: inline-flex;
+  align-items: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff !important;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.adm-table-index {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.adm-cell-empty {
+  color: var(--admin-muted, #7d9686);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* PC desktop table: hover reveals eye & pencil, default shows only 3-dot */
+@media (hover: hover) and (pointer: fine) {
+  .adm-beui-table .adm-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .adm-beui-table .adm-quick-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .adm-beui-table .adm-quick-action {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(6px) scale(0.95);
+    transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+                transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    will-change: opacity, transform;
+  }
+
+  .adm-beui-table tr:hover .adm-quick-action,
+  .adm-beui-table tr:focus-within .adm-quick-action,
+  .adm-beui-table tr:has([data-state=open]) .adm-quick-action {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0) scale(1);
+    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+                transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* Entrance stagger: Eye icon appears first, Pencil icon follows after 30ms */
+  .adm-beui-table tr:hover .adm-quick-view,
+  .adm-beui-table tr:focus-within .adm-quick-view,
+  .adm-beui-table tr:has([data-state=open]) .adm-quick-view {
+    transition-delay: 0ms;
+  }
+
+  .adm-beui-table tr:hover .adm-quick-edit,
+  .adm-beui-table tr:focus-within .adm-quick-edit,
+  .adm-beui-table tr:has([data-state=open]) .adm-quick-edit {
+    transition-delay: 30ms;
+  }
+
+  .adm-beui-table .adm-more-btn {
+    opacity: 0.85;
+    transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
+                color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .adm-beui-table tr:hover .adm-more-btn,
+  .adm-beui-table tr:focus-within .adm-more-btn,
+  .adm-beui-table tr:has([data-state=open]) .adm-more-btn {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-beui-table .adm-quick-action {
+    transform: none !important;
+    transition-duration: 80ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+/* Sidebar Application indicator badge */
+.adm-sidebar-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--admin-accent, #49c977);
+  color: #041b0b !important;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Member Directory Analytics Cards - Balanced 2x2 grid on mobile, 4-col on desktop */
+.adm-member-analytics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.adm-application-analytics {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.adm-member-card {
+  text-align: left;
+  border: 1px solid #1a271f;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #09100c;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 102px;
+  cursor: pointer;
+  position: relative;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 150ms ease, background 150ms ease, transform 100ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .adm-member-card:hover {
+    border-color: #2b4032;
+    background: #0d1711;
+  }
+}
+
+.adm-member-card:active {
+  transform: scale(0.98);
+  background: #0d1711;
+}
+
+/* Active card: refined, subtle border without radioactive glow */
+.adm-member-card[data-active="true"] {
+  border-color: rgba(73, 201, 119, 0.45);
+  background: #0d1a12;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.adm-member-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.adm-member-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #142219;
+  color: #78c691;
+  border: 1px solid #1e3626;
+}
+
+.adm-member-card[data-active="true"] .adm-member-card-icon {
+  background: #193322;
+  color: #9ee6b4;
+  border-color: #2b5437;
+}
+
+.adm-card-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #49c977;
+  box-shadow: 0 0 6px rgba(73, 201, 119, 0.4);
+}
+
+.adm-member-card-pct {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6a8273;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-member-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-member-card-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #d0ded5;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-member-card-note {
+  font-size: 10px;
+  color: #6a8273;
+  margin-top: 1px;
+}
+
+.adm-card-skeleton {
+  min-height: 102px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #111c15, #18281e, #111c15);
+  background-size: 200% 100%;
+  animation: adm-loading 1.5s ease infinite;
+  border: 1px solid #1a271f;
+}
+
+@media (max-width: 900px) {
+  .adm-member-analytics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-member-card {
+    transform: none !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+/* ==========================================================================
+   Profile Card, Dropdown Menus & Interactive Micro-Animations (Emil Kowalski)
+   ========================================================================== */
+
+/* Shared motion tokens */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* 1. Radix Dropdown Menus — Scale out of trigger, snappy <200ms entrance */
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu) {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, top right);
+  will-change: transform, opacity;
+}
+
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"] {
+  animation: adm-menu-enter 180ms var(--ease-out) forwards;
+}
+
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="closed"] {
+  animation: adm-menu-exit 130ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"][data-side="bottom"] {
+  animation-name: adm-menu-enter-bottom;
+}
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"][data-side="top"] {
+  animation-name: adm-menu-enter-top;
+}
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"][data-side="right"] {
+  animation-name: adm-menu-enter-right;
+}
+:is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"][data-side="left"] {
+  animation-name: adm-menu-enter-left;
+}
+
+@keyframes adm-menu-enter {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes adm-menu-enter-bottom {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes adm-menu-enter-top {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes adm-menu-enter-right {
+  from { opacity: 0; transform: translateX(-4px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes adm-menu-enter-left {
+  from { opacity: 0; transform: translateX(4px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes adm-menu-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+/* 2. Account Menu Staggered Content Reveal */
+.adm-account-menu[data-state="open"] .adm-account-card {
+  animation: adm-stagger-in 200ms var(--ease-out) 30ms both;
+}
+.adm-account-menu[data-state="open"] .adm-account-tile:nth-child(1) {
+  animation: adm-stagger-in 180ms var(--ease-out) 50ms both;
+}
+.adm-account-menu[data-state="open"] .adm-account-tile:nth-child(2) {
+  animation: adm-stagger-in 180ms var(--ease-out) 75ms both;
+}
+.adm-account-menu[data-state="open"] .adm-account-tile:nth-child(3) {
+  animation: adm-stagger-in 180ms var(--ease-out) 100ms both;
+}
+.adm-account-menu[data-state="open"] .adm-account-tile:nth-child(4) {
+  animation: adm-stagger-in 180ms var(--ease-out) 125ms both;
+}
+.adm-account-menu[data-state="open"] .adm-account-signout-item {
+  animation: adm-stagger-in 180ms var(--ease-out) 140ms both;
+}
+
+@keyframes adm-stagger-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 3. Elevated Profile Card Interactive Polish */
+.adm-account-card {
+  transition: border-color 180ms var(--ease-out),
+              box-shadow 180ms var(--ease-out),
+              background 180ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .adm-account-card:hover {
+    border-color: rgba(73, 201, 119, 0.38);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .adm-account-card:hover .adm-account-card-avatar {
+    transform: scale(1.06);
+    border-color: #3f704c;
+    box-shadow: 0 2px 10px rgba(73, 201, 119, 0.2);
+  }
+}
+.adm-account-card-avatar {
+  transition: transform 180ms var(--ease-out),
+              border-color 180ms ease,
+              box-shadow 180ms ease;
+}
+
+/* 4. Live Session Status Dot Rhythm Pulse */
+.adm-account-status-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #49c977;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(73, 201, 119, 0.7);
+  animation: adm-live-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes adm-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(73, 201, 119, 0.7); }
+  50% { box-shadow: 0 0 0 4.5px rgba(73, 201, 119, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(73, 201, 119, 0); }
+}
+
+/* 5. Account Action Tiles Micro-Interactions */
+.adm-account-tile {
+  transition: background 150ms ease,
+              border-color 150ms ease,
+              transform 160ms var(--ease-out),
+              box-shadow 150ms ease !important;
+}
+.adm-account-tile:active {
+  transform: scale(0.97) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .adm-account-tile:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+  }
+  .adm-account-tile:hover .adm-account-tile-icon {
+    transform: scale(1.08);
+    background: rgba(73, 201, 119, 0.16) !important;
+    border-color: rgba(73, 201, 119, 0.35) !important;
+    color: #6aebb2 !important;
+  }
+  .adm-account-tile:hover .adm-account-tile-ext {
+    transform: translate(1.5px, -1.5px);
+    color: #49c977 !important;
+    opacity: 1 !important;
+  }
+  .adm-account-tile:first-child:hover .adm-account-tile-icon svg {
+    transform: rotate(60deg);
+  }
+}
+.adm-account-tile-icon {
+  transition: transform 160ms var(--ease-out),
+              background 150ms ease,
+              border-color 150ms ease,
+              color 150ms ease;
+}
+.adm-account-tile-icon svg {
+  transition: transform 240ms var(--ease-out);
+}
+.adm-account-tile-ext {
+  transition: transform 160ms var(--ease-out),
+              color 150ms ease,
+              opacity 150ms ease;
+}
+
+/* 6. Sign Out Button Physical Press Feedback */
+.adm-account-signout-item {
+  transition: background 140ms ease,
+              color 140ms ease,
+              transform 120ms var(--ease-out) !important;
+}
+.adm-account-signout-item:active {
+  transform: scale(0.97) !important;
+}
+.adm-account-signout-item svg {
+  transition: transform 160ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .adm-account-signout-item:hover svg {
+    transform: translateX(-2.5px);
+  }
+}
+
+/* 7. Sidebar Footer & Triggers */
+.adm-sidebar-footer {
+  transition: background-color 160ms ease,
+              border-color 160ms ease,
+              box-shadow 160ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .adm-sidebar-footer:hover {
+    background: rgba(16, 32, 22, 0.9);
+    border-color: #24462d;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  }
+  .adm-sidebar-footer:hover .adm-avatar {
+    transform: scale(1.05);
+    border-color: #3b6c47;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  .adm-sidebar-footer:hover .adm-account > svg {
+    transform: scale(1.12);
+    color: #7ce39e;
+  }
+}
+.adm-sidebar-footer .adm-avatar {
+  transition: transform 160ms var(--ease-out), border-color 160ms ease, box-shadow 160ms ease;
+}
+.adm-account > svg {
+  transition: transform 160ms var(--ease-out), color 160ms ease;
+}
+.adm-account-trigger {
+  transition: transform 120ms var(--ease-out);
+}
+.adm-account-trigger:active {
+  transform: scale(0.985);
+}
+.adm-account-avatar {
+  transition: transform 160ms var(--ease-out), box-shadow 160ms ease;
+}
+.adm-account-avatar:active {
+  transform: scale(0.93) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .adm-account-avatar:hover {
+    transform: scale(1.06);
+    box-shadow: 0 0 12px rgba(73, 201, 119, 0.25);
+  }
+}
+
+/* 8. General Dropdown Menu Items Interactive Polish */
+.adm-member-menu [role=menuitem],
+.adm-range-menu [role=menuitem] {
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms var(--ease-out);
+}
+.adm-member-menu [role=menuitem]:active,
+.adm-range-menu [role=menuitem]:active {
+  transform: scale(0.98);
+}
+.adm-directory-options {
+  transition: transform 140ms var(--ease-out), color 140ms ease;
+}
+.adm-directory-options:active {
+  transform: scale(0.92);
+}
+.adm-more-btn {
+  transition: transform 140ms var(--ease-out), opacity 150ms ease, color 140ms ease;
+}
+.adm-more-btn:active {
+  transform: scale(0.92);
+}
+
+/* 9. Comprehensive Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  :is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="open"],
+  :is([data-radix-menu-content], .adm-member-menu, .adm-account-menu, .adm-range-menu)[data-state="closed"] {
+    animation: none !important;
+    transform: none !important;
+  }
+  .adm-account-menu[data-state="open"] :is(.adm-account-card, .adm-account-tile, .adm-account-signout-item) {
+    animation: none !important;
+    transform: none !important;
+  }
+  .adm-account-status-dot {
+    animation: none !important;
+  }
+  .adm-account-tile,
+  .adm-account-trigger,
+  .adm-account-avatar,
+  .adm-account-signout-item,
+  .adm-visit-button,
+  .adm-directory-options,
+  .adm-more-btn {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+
+

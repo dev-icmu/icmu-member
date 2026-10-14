@@ -57,19 +57,11 @@ export const PersonalInfoStep = ({ formData, handleChange, handleBlur, errors, h
         value={formData.full_name}
         onChange={(val) => handleChange('full_name', stripNumbers(val))}
         onBlur={() => handleBlur('full_name')}
-        placeholder="e.g. Sunil Perera"
+        placeholder="Rathnayaka Mudiyanselage Palle Gedara Thamindu Hasarinda."
         error={errors.full_name}
       />
 
-      <Input
-        label={<>Name with Initials <span className="text-destructive">*</span></>}
-        type="text"
-        value={formData.name_with_initials}
-        onChange={(val) => handleChange('name_with_initials', stripNumbers(val))}
-        onBlur={() => handleBlur('name_with_initials')}
-        placeholder="e.g. S. Perera"
-        error={errors.name_with_initials}
-      />
+      <p className="text-xs text-muted-foreground">Use your full name or initials with your last name, as written on the membership form.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -109,7 +101,7 @@ export const PersonalInfoStep = ({ formData, handleChange, handleBlur, errors, h
       {/* City — Searchable Combobox with Sri Lankan cities + custom typing */}
       <div>
         <label className="block text-sm font-medium text-foreground mb-1.5">
-          City <span className="text-muted-foreground font-normal">(Optional)</span>
+          City <span className="text-destructive">*</span>
         </label>
         <Combobox
           value={formData.city}

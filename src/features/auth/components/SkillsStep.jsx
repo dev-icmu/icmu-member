@@ -1,4 +1,4 @@
-﻿import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 
 export const SkillsStep = ({ formData, toggleSkill, errors, handlePrevStep, skillsData, skillsLoading, isPending }) => {
@@ -6,7 +6,7 @@ export const SkillsStep = ({ formData, toggleSkill, errors, handlePrevStep, skil
     <div className="space-y-5 animate-in fade-in duration-200">
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-medium text-gray-300">Select Relevant Skills Possessed <span className="text-destructive">*</span></label>
+          <label className="text-xs font-medium text-gray-300">Select Relevant Skills Possessed <span className="text-muted-foreground font-normal">(Optional)</span></label>
           <span className="text-[10px] text-gray-500">{formData.skills.length} selected</span>
         </div>
         {skillsLoading ? (

@@ -1,9 +1,20 @@
 const STATUSES = new Set(['all', 'pending', 'accepted', 'rejected']);
 const ACTIVITIES = new Set(['all', 'active', 'inactive']);
-const SORTS = new Set(['newest', 'oldest', 'name']);
+const SORTS = new Set([
+  'newest', 'oldest',
+  'name', 'name_asc', 'name_desc',
+  'id_asc', 'id_desc',
+  'admission_asc', 'admission_desc',
+  'batch_asc', 'batch_desc',
+  'status_asc', 'status_desc',
+  'form_asc', 'form_desc',
+  'joined_asc', 'joined_desc',
+]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const REQUIRED_FIELDS = ['full_name', 'name_with_initials', 'date_of_birth', 'joined_date', 'whatsapp_number'];
-const TEXT_FIELDS = ['index_number', 'full_name', 'name_with_initials', 'city', 'email_address', 'school_class', 'address', 'other_skills'];
+const REQUIRED_FIELDS = ['full_name', 'date_of_birth', 'joined_date', 'whatsapp_number'];
+const TEXT_FIELDS = ['index_number', 'full_name', 'city', 'email_address'];
+export const MEMBERSHIP_FEE_LKR = 500;
+export const normalizeApplicationText = value => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 const cleanText = value => String(value ?? '').trim().replace(/\s+/g, ' ');
 
@@ -13,14 +24,22 @@ function positiveInteger(value, fallback, maximum) {
 }
 
 export function normalizeMemberListOptions(options = {}) {
-  return {
+  const result = {
     page: positiveInteger(options.page, 1, 1_000_000),
     limit: positiveInteger(options.limit, 20, 100),
     search: cleanText(options.search).replace(/\*/g, '').slice(0, 150),
     status: STATUSES.has(options.status) ? options.status : 'all',
     activity: ACTIVITIES.has(options.activity) ? options.activity : 'all',
     sort: SORTS.has(options.sort) ? options.sort : 'newest',
+    batch: /^\d{4}$/.test(String(options.batch)) && Number(options.batch) >= 1939 && Number(options.batch) <= 2200 ? Number(options.batch) : null,
   };
+  if (typeof options.skill === 'string' && UUID.test(options.skill)) {
+    result.skill = options.skill;
+  }
+  if (Array.isArray(options.statuses)) {
+    result.statuses = options.statuses.filter(s => STATUSES.has(s));
+  }
+  return result;
 }
 
 // Escape LIKE wildcards first, then quote the entire value for PostgREST's logic grammar.
@@ -44,8 +63,10 @@ function dateValue(value, label) {
   return date;
 }
 
-function phoneValue(value, label) {
+export function phoneValue(value, label = 'phone number') {
   let phone = cleanText(value).replace(/[\s()-]/g, '');
+  if (/^00/.test(phone)) phone = `+${phone.slice(2)}`;
+  if (phone.startsWith('0') && !/^0\d{9}$/.test(phone)) throw new Error(`Enter a 10-digit ${label}, starting with 0.`);
   if (phone.startsWith('0')) phone = `+94${phone.slice(1)}`;
   if (!phone.startsWith('+')) phone = `+${phone}`;
   if (!/^\+[1-9]\d{7,14}$/.test(phone)) throw new Error(`Enter a valid ${label}.`);
@@ -53,18 +74,21 @@ function phoneValue(value, label) {
 }
 
 /** Only editable fields enter an RPC payload. The database enforces the same boundary. */
-export function buildMemberPayload(input, { partial = false, requireGuardian = false, admin = false } = {}) {
+export function buildMemberPayload(input, { partial = false, requireGuardian = false, admin = false, lockedFee = false } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Member details are required.');
   const payload = {};
   for (const field of TEXT_FIELDS) {
     if (input[field] === undefined) continue;
-    const value = cleanText(input[field]);
-    payload[field] = field === 'email_address' ? value.toLowerCase() || null : value || null;
+    const value = normalizeApplicationText(input[field]);
+    payload[field] = value || null;
   }
   if (payload.email_address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email_address)) {
     throw new Error('Enter a valid email address.');
   }
   if (admin) {
+    if (lockedFee && (input.fee_received !== undefined || (input.fee_amount !== undefined && partial))) {
+      throw new Error('Payment and fee details cannot be modified after member approval.');
+    }
     if (!partial) payload.application_source = 'paper';
     if (input.application_source !== undefined && input.application_source !== null) {
       if (!['paper', 'online'].includes(input.application_source) || (!partial && input.application_source !== 'paper')) {
@@ -75,26 +99,30 @@ export function buildMemberPayload(input, { partial = false, requireGuardian = f
     if (input.form_number !== undefined) {
       if (input.form_number !== null && typeof input.form_number !== 'string') throw new Error('Enter the printed form number as text.');
       payload.form_number = cleanText(input.form_number) || null;
+      if (payload.form_number && !/^\d{4}$/.test(payload.form_number)) throw new Error('Enter the 4-digit form number.');
     }
     if (input.fee_amount !== undefined) {
-      if (input.fee_amount === null && payload.application_source !== 'paper') payload.fee_amount = null;
-      else if (typeof input.fee_amount !== 'number' || !Number.isFinite(input.fee_amount)
-        || input.fee_amount < 0 || input.fee_amount > 999999.99
-        || Math.abs(input.fee_amount * 100 - Math.round(input.fee_amount * 100)) > 0.000001) {
-        throw new Error('Enter a valid fee amount with up to two decimal places.');
-      } else payload.fee_amount = input.fee_amount;
-    } else if (!partial) payload.fee_amount = 500;
+      if (input.fee_amount !== MEMBERSHIP_FEE_LKR) throw new Error('The membership fee amount is fixed at LKR 500.');
+      payload.fee_amount = MEMBERSHIP_FEE_LKR;
+    } else if (!partial) payload.fee_amount = MEMBERSHIP_FEE_LKR;
+    if (input.custom_skills !== undefined) {
+      if (!Array.isArray(input.custom_skills) || input.custom_skills.length > 20
+        || input.custom_skills.some(name => typeof name !== 'string' || !normalizeApplicationText(name) || normalizeApplicationText(name).length > 50)) {
+        throw new Error('Add up to 20 skills, with 1 to 50 characters per skill.');
+      }
+      payload.custom_skills = [...new Set(input.custom_skills.map(normalizeApplicationText))];
+    }
     if (input.fee_received !== undefined) {
       if (typeof input.fee_received !== 'boolean') throw new Error('Choose whether the fee has been received.');
       payload.fee_received = input.fee_received;
     }
     if (payload.application_source === 'paper') {
-      for (const field of ['form_number', 'school_class', 'address']) {
+      for (const field of ['form_number', 'city']) {
         if ((!partial || Object.hasOwn(payload, field)) && !payload[field]) throw new Error(`${field.replaceAll('_', ' ')} is required for a paper application.`);
       }
     }
   }
-  for (const [field, maximum] of Object.entries({ form_number: 50, school_class: 30, address: 500, other_skills: 500 })) {
+  for (const [field, maximum] of Object.entries({ full_name: 200, name_with_initials: 100, index_number: 20, city: 100, email_address: 254, form_number: 4, school_class: 30, address: 500 })) {
     if (payload[field]?.length > maximum) throw new Error(`${field.replaceAll('_', ' ')} must be ${maximum} characters or fewer.`);
   }
   if (input.date_of_birth !== undefined) {
@@ -117,9 +145,9 @@ export function buildMemberPayload(input, { partial = false, requireGuardian = f
     const guardian = input.guardian;
     if (typeof guardian !== 'object' || Array.isArray(guardian)) throw new Error('Enter valid guardian details.');
     payload.guardian = {
-      guardian_name: cleanText(guardian.guardian_name),
+      guardian_name: normalizeApplicationText(guardian.guardian_name),
       contact_number: phoneValue(guardian.contact_number, 'guardian contact number'),
-      occupation: cleanText(guardian.occupation) || null,
+      occupation: normalizeApplicationText(guardian.occupation) || null,
     };
     if (!payload.guardian.guardian_name) throw new Error('Guardian name is required.');
   }

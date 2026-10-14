@@ -118,6 +118,16 @@ Deno.serve(async (request: Request) => {
       let memberUser;
       if (linkedId) {
         memberUser = await readMappedUser(linkedId);
+        const { error } = await service.auth.admin.updateUserById(memberUser.id, {
+          app_metadata: {
+            ...memberUser.app_metadata,
+            web_index: index,
+            display_name: profile.full_name || 'ICMU admin',
+            role: profile.role,
+            avatar_url: profile.avatar_url || memberUser.app_metadata?.avatar_url || null,
+          },
+        });
+        if (error) throw new RequestError(503, 'Account details could not be synced. Please try again.');
       } else {
         // A pre-existing email is never adopted as proof of identity.
         const { data, error } = await service.auth.admin.createUser({
@@ -126,6 +136,8 @@ Deno.serve(async (request: Request) => {
           app_metadata: {
             identity_provider: 'icmu-web', web_user_id: profile.id,
             web_index: index, display_name: profile.full_name || 'ICMU admin',
+            role: profile.role,
+            avatar_url: profile.avatar_url || null,
           },
         });
         if (error || !data.user) {
@@ -157,6 +169,15 @@ Deno.serve(async (request: Request) => {
         throw new RequestError(503, 'Admin sign-in is temporarily unavailable.');
       }
       const session = verified.session;
+      const revokeProof = cleanup;
+      cleanup = async () => {
+        await service.auth.admin.signOut(session.access_token, 'local');
+        await revokeProof?.();
+      };
+      await webRpc('register_member_device', {
+        p_session_id: sessionId(session.access_token),
+        p_user_agent: (request.headers.get('user-agent') || '').slice(0, 512),
+      }, index, proof.token);
       const { data: registered, error: registerError } = await service.rpc('admin_bridge_register', {
         p_user_id: memberUser.id, p_session_id: sessionId(session.access_token),
         p_web_user_id: profile.id, p_web_index: index,
@@ -192,14 +213,33 @@ Deno.serve(async (request: Request) => {
     }
 
     let allowed = false;
+    let role: string | undefined;
     if (proof?.web_token && proof.web_index && Date.parse(proof.web_expires_at) > Date.now()) {
-      try { allowed = await webRpc('can_manage_contacts', {}, proof.web_index, proof.web_token) === true; }
-      catch { /* Revoke the member lease when the identity service is unavailable. */ }
+      try {
+        const profile = await webRpc('current_account_profile', {}, proof.web_index, proof.web_token);
+        allowed = profile?.is_active === true && adminRole(profile.role);
+        if (allowed && profile?.role) {
+          role = profile.role;
+          if (identity.user.app_metadata?.role !== role || identity.user.app_metadata?.display_name !== profile.full_name || identity.user.app_metadata?.avatar_url !== profile.avatar_url) {
+            await service.auth.admin.updateUserById(identity.user.id, {
+              app_metadata: {
+                ...identity.user.app_metadata,
+                display_name: profile.full_name || identity.user.app_metadata?.display_name || 'ICMU admin',
+                role,
+                avatar_url: profile.avatar_url || identity.user.app_metadata?.avatar_url || null,
+              },
+            });
+          }
+        }
+      } catch {
+        try { allowed = await webRpc('can_manage_contacts', {}, proof.web_index, proof.web_token) === true; }
+        catch { /* Revoke the member lease when the identity service is unavailable. */ }
+      }
     }
     const { data: renewed, error: renewError } = await service.rpc('admin_bridge_renew', { ...args, p_allowed: allowed });
     if (renewError) throw new RequestError(503, 'Admin access could not be checked. Please try again.');
     if (!allowed || renewed !== true) throw new RequestError(403, 'Your admin session has ended. Please sign in again.');
-    return reply(200, { allowed: true });
+    return reply(200, { allowed: true, role });
   } catch (error) {
     if (cleanup) {
       try { await cleanup(); } catch { /* Unused credentials expire on the identity service. */ }

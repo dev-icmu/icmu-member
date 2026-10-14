@@ -31,6 +31,7 @@ test('prepared website account boundary enforces real credentials and private co
       await db.exec(await readFile(new URL(`../../icmu-web/supabase/migrations/${name}`, import.meta.url), 'utf8'));
     }
     await db.exec(await readFile(new URL('../supabase/upstream/20261014141029_shared_admin_account_boundary.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../supabase/upstream/20261014161420_member_device_history.sql', import.meta.url), 'utf8'));
     await db.exec(`insert into public.users(id,index_number,full_name,role,is_active,password_hash) values
       ('${superId}','test-super','Synthetic super admin','super-admin',true,extensions.crypt('safe-test-password',extensions.gen_salt('bf'))),
       ('${writerId}','test-writer','Synthetic writer','writer',true,extensions.crypt('safe-test-password',extensions.gen_salt('bf')));
@@ -65,6 +66,27 @@ test('prepared website account boundary enforces real credentials and private co
     await db.query("select set_config('request.headers',$1,false)", [JSON.stringify({ 'x-user-index': 'test-super', 'x-contacts-token': superAdmin.token })]);
     assert.equal((await db.query('select public.can_manage_contacts() allowed')).rows[0].allowed, true);
     assert.equal((await db.query('select public.current_account_profile() result')).rows[0].result.id, superId);
+    // Member sign-ins appear in the same device list and carry revocable proofs.
+    const deviceId = '50000000-0000-4000-8000-000000000001';
+    const memberProof = (await db.query("select public.create_contacts_session('test-super','safe-test-password',false) result")).rows[0].result;
+    const memberHeaders = JSON.stringify({'x-user-index':'test-super','x-contacts-token':memberProof.token});
+    await db.query("select set_config('request.headers',$1,false)",[memberHeaders]);
+    assert.equal((await db.query('select public.register_member_device($1,$2) result',[deviceId,'Mozilla/5.0 Windows Chrome/120'])).rows[0].result,true);
+    assert.equal((await db.query('select public.register_member_device($1,$2) result',[deviceId,'Mozilla/5.0 Windows Chrome/120'])).rows[0].result,true);
+    const profile = (await db.query('select public.current_account_profile() result')).rows[0].result;
+    assert.equal(profile.active_sessions.length,1);
+    assert.equal(profile.active_sessions[0].sessionId,'icmu-member:'+deviceId);
+    assert.match(profile.active_sessions[0].deviceName,/Windows.*Chrome.*ICMU Member/);
+    assert.ok(profile.last_login);
+    await assert.rejects(db.query('select * from accounts_private.member_portal_sessions'),e=>e.code==='42501');
+    await assert.rejects(db.query('select public.register_member_device($1,$2)',['50000000-0000-4000-8000-000000000002','Browser']),e=>e.code==='22023');
+    await db.query("select set_config('request.headers',$1,false)",[JSON.stringify({'x-user-index':'test-super','x-contacts-token':superAdmin.token})]);
+    await db.query("select public.update_active_sessions($1,'[]'::jsonb)",[superId]);
+    await db.query("select set_config('request.headers',$1,false)",[memberHeaders]);
+    assert.equal((await db.query('select public.can_manage_contacts() allowed')).rows[0].allowed,false);
+    await assert.rejects(db.query('select public.register_member_device($1,$2)',[deviceId,'Browser']),e=>e.code==='42501');
+    await db.query("select set_config('request.headers',$1,false)",[JSON.stringify({'x-user-index':'test-super','x-contacts-token':superAdmin.token})]);
+    assert.equal((await db.query('select public.current_account_profile() result')).rows[0].result.active_sessions.length,0);
     const directory = (await db.query('select public.account_directory() result')).rows[0].result;
     assert.equal(directory.length, 2);
     assert.equal(directory[0].password_hash, undefined);

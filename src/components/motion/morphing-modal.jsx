@@ -5,16 +5,24 @@ import {
   AnimatePresence,
   motion,
   useReducedMotion,
+  useIsPresent,
 } from "motion/react";
-import { useEffect } from "react";
+import { forwardRef, useEffect } from "react";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { PresenceGate } from "@/lib/presence-gate";
 import { cn } from "@/lib/utils";
+
+const ModalView = forwardRef(function ModalView(props, ref) {
+  const present = useIsPresent();
+  return <motion.div {...props} ref={ref} inert={!present} aria-hidden={!present || undefined} />;
+});
 
 export function MorphingModal({
   viewId,
   onClose,
   children,
+  header,
+  onExitComplete,
   placement = "bottom",
   className
 }) {
@@ -40,12 +48,14 @@ export function MorphingModal({
   // the exit rather than when it ends — `open` is already false for those
   // frames. See tests/fixed-overlay-edge-sampling.test.tsx.
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {open ? (
         <PresenceGate key="backdrop">
           {({ gate }) => (
             <motion.button
               type="button"
+              data-slot="morphing-modal-backdrop"
+              tabIndex={-1}
               aria-label="Close modal"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -70,29 +80,30 @@ export function MorphingModal({
               )}>
               <motion.div
                 key="panel"
-                layout
-                initial={{ opacity: 0, y: enterY, scale: enterScale }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
+                layout={!reduce}
+                data-slot="morphing-modal-panel"
+                initial={{ opacity: 0, transform: `translateY(${enterY}px) scale(${enterScale})` }}
+                animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
                 exit={{
                   opacity: 0,
-                  y: enterY,
-                  scale: reduce ? 1 : 0.98,
+                  transform: `translateY(${enterY}px) scale(${reduce ? 1 : 0.98})`,
                   transition: { duration: 0.18, ease: EASE_OUT },
                 }}
-                transition={SPRING_PANEL}
+                transition={reduce ? { duration: 0.14, ease: EASE_OUT } : SPRING_PANEL}
                 {...gate}
                 className={cn(
                   "pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-3xl border border-border bg-background shadow-2xl will-change-transform",
                   className
                 )}>
-                <motion.div layout="position" className="p-5">
+                {header}
+                <motion.div layout={reduce ? false : "position"} className="p-5">
                   <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.div
+                    <ModalView
                       key={viewId}
                       initial={
                         reduce
                           ? { opacity: 0 }
-                          : { opacity: 0, y: 8, filter: "blur(4px)" }
+                          : { opacity: 0, transform: "translateY(8px)" }
                       }
                       animate={
                         reduce
@@ -105,8 +116,7 @@ export function MorphingModal({
                             }
                           : {
                               opacity: 1,
-                              y: 0,
-                              filter: "blur(0px)",
+                              transform: "translateY(0px)",
                               transition: {
                                 duration: 0.24,
                                 ease: EASE_OUT,
@@ -124,8 +134,7 @@ export function MorphingModal({
                             }
                           : {
                               opacity: 0,
-                              y: -8,
-                              filter: "blur(4px)",
+                              transform: "translateY(-8px)",
                               transition: {
                                 duration: 0.16,
                                 ease: EASE_OUT,
@@ -133,7 +142,7 @@ export function MorphingModal({
                             }
                       }>
                       {children}
-                    </motion.div>
+                    </ModalView>
                   </AnimatePresence>
                 </motion.div>
               </motion.div>

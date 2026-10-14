@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CirclePause, CirclePlay, LockKeyhole, Pencil, Plus, Search, Tags, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CirclePause, CirclePlay, LockKeyhole, Pencil, Plus, Search, Tags, Users } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
+import { StatefulButton } from '@/components/motion/button/stateful';
 import { Input } from '@/components/motion/input';
 import { Checkbox } from '@/components/motion/checkbox';
 import { useToast } from '@/context/ToastContext';
@@ -8,6 +9,7 @@ import { useMembers } from '@/entities/members/hooks/useMembers';
 import { useAssignMemberToTeam, useRemoveMemberFromTeam, useTeamRoster } from '@/entities/teams/hooks/useTeams';
 import { AdminDialog } from './AdminDialog';
 import './catalog.css';
+import { AdminPagination, AdminLoading } from './AdminMotion';
 
 function explainError(error, duplicateMessage) {
   if (error?.code === '23505') return duplicateMessage || 'This record already exists.';
@@ -17,7 +19,7 @@ function explainError(error, duplicateMessage) {
 }
 
 function QueryState({ query, subject, empty, children }) {
-  if (query.isPending) return <div className="adm-catalog-state" role="status"><span className="adm-catalog-spinner" />Loading {subject}...</div>;
+  if (query.isPending) return <div className="adm-catalog-state"><AdminLoading>{`Loading ${subject}...`}</AdminLoading></div>;
   if (query.isError) return <div className="adm-catalog-state" role="alert"><strong>Could not load {subject}</strong><p>{explainError(query.error)}</p><Button type="button" variant="secondary" onClick={() => query.refetch()} disabled={query.isFetching}>Try again</Button></div>;
   if (empty) return <div className="adm-catalog-state"><p>{empty}</p></div>;
   return children;
@@ -27,7 +29,7 @@ function Pagination({ page, count, limit, onChange, busy }) {
   const pages = Math.max(1, Math.ceil(count / limit));
   return <div className="adm-catalog-pagination">
     <span>{count.toLocaleString()} {count === 1 ? 'member' : 'members'} · Page {page} of {pages}</span>
-    <div><Button type="button" variant="secondary" disabled={page <= 1 || busy} onClick={() => onChange(page - 1)} aria-label="Previous page"><ArrowLeft size={16} /></Button><Button type="button" variant="secondary" disabled={page >= pages || busy} onClick={() => onChange(page + 1)} aria-label="Next page"><ArrowRight size={16} /></Button></div>
+    <AdminPagination page={page} pages={pages} busy={busy} onChange={onChange}/>
   </div>;
 }
 
@@ -70,7 +72,7 @@ function CatalogEditor({ record, kind, skillsQuery, mutation, onClose }) {
         </QueryState>
       </fieldset>}
       {error && <p className="adm-catalog-error" role="alert">{error}</p>}
-      <div className="adm-dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" disabled={pending || !name.trim() || (isTeam && (skillsQuery.isPending || skillsQuery.isError))}>{pending ? 'Saving...' : record ? 'Save changes' : `Add ${kind}`}</Button></div>
+      <div className="adm-dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button><StatefulButton type="submit" state={pending ? 'loading' : error ? 'error' : 'idle'} loadingText="Saving..." errorText="Try again" disabled={pending || !name.trim() || (isTeam && (skillsQuery.isPending || skillsQuery.isError))}>{record ? 'Save changes' : `Add ${kind}`}</StatefulButton></div>
     </form>
   </AdminDialog>;
 }
@@ -97,7 +99,7 @@ function ActivityDialog({ record, kind, mutation, onClose }) {
 
   return <AdminDialog open onClose={onClose} title={`${action} ${name}?`} description={activating ? `This ${kind} will be available for new assignments again.` : `This ${kind} will no longer be available for new assignments. Existing records and assignments will stay in place.`} busy={mutation.isPending}>
     {error && <p className="adm-catalog-error" role="alert">{error}</p>}
-    <div className="adm-dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={mutation.isPending}>Cancel</Button><Button type="button" onClick={confirm} disabled={mutation.isPending}>{mutation.isPending ? 'Saving...' : action}</Button></div>
+    <div className="adm-dialog-actions"><Button type="button" variant="secondary" onClick={onClose} disabled={mutation.isPending}>Cancel</Button><StatefulButton type="button" state={mutation.isPending ? 'loading' : error ? 'error' : 'idle'} loadingText="Saving..." errorText={`Retry ${action.toLowerCase()}`} onClick={confirm} disabled={mutation.isPending}>{action}</StatefulButton></div>
   </AdminDialog>;
 }
 
@@ -140,9 +142,11 @@ function AddTeamMember({ team, onBack, onPendingChange }) {
     <QueryState query={query} subject="members" empty={members.length === 0 ? search ? 'No active members match this search.' : 'No accepted, active members are available.' : null}>
       <div className="adm-catalog-member-list">{members.map(member => {
         const assigned = added.includes(member.id) || member.member_team_assignment?.some(assignment => assignment.team_id === team.id);
-        return <div className="adm-catalog-member" key={member.id}><span className="adm-catalog-avatar" aria-hidden="true">{member.full_name?.trim().charAt(0) || 'M'}</span><div><strong>{member.full_name}</strong><span>{member.member_id || `Index ${member.index_number || 'not recorded'}`}</span></div><Button type="button" variant={assigned ? 'ghost' : 'secondary'} disabled={assigned || assign.isPending || searchPending} onClick={() => add(member)} aria-label={assigned ? `${member.full_name} is assigned` : `Add ${member.full_name}`}>
-          {assigned ? <><Check size={16} /> Added</> : assign.isPending && assign.variables?.member_id === member.id ? 'Adding...' : <><Plus size={16} /> Add</>}
-        </Button></div>;
+        const isCurrent = assign.variables?.member_id === member.id;
+        const state = assigned ? 'success' : isCurrent && assign.isPending ? 'loading' : isCurrent && assign.isError ? 'error' : 'idle';
+        return <div className="adm-catalog-member" key={member.id}><span className="adm-catalog-avatar" aria-hidden="true">{member.full_name?.trim().charAt(0) || 'M'}</span><div><strong>{member.full_name}</strong><span>{member.member_id || `Index ${member.index_number || 'not recorded'}`}</span></div><StatefulButton type="button" state={state} loadingText="Adding..." successText="Added" errorText="Retry" icon={<Plus size={16} />} variant={assigned ? 'ghost' : 'secondary'} disabled={assigned || assign.isPending || searchPending} onClick={() => add(member)} aria-label={assigned ? `${member.full_name} is assigned` : `Add ${member.full_name}`}>
+          Add
+        </StatefulButton></div>;
       })}</div>
     </QueryState>
     {!query.isError && <Pagination page={page} count={count} limit={8} onChange={setPage} busy={query.isFetching || assign.isPending || searchPending} />}
@@ -180,7 +184,7 @@ function TeamRoster({ team, onClose }) {
     {adding ? <AddTeamMember team={team} onBack={() => setAdding(false)} onPendingChange={setAssignmentPending} /> : removing ? <div className="adm-catalog-roster">
       <h3>Remove {removing.member?.full_name || 'this member'}?</h3><p className="adm-catalog-hint">Their membership record will stay in place. Only their assignment to this team will be removed.</p>
       {error && <p className="adm-catalog-error" role="alert">{error}</p>}
-      <div className="adm-dialog-actions"><Button type="button" variant="secondary" disabled={pending} onClick={() => { setRemoving(null); setError(''); }}>Keep member</Button><Button type="button" disabled={pending} onClick={confirmRemove}>{pending ? 'Removing...' : 'Remove from team'}</Button></div>
+      <div className="adm-dialog-actions"><Button type="button" variant="secondary" disabled={pending} onClick={() => { setRemoving(null); setError(''); }}>Keep member</Button><StatefulButton type="button" state={remove.isPending ? 'loading' : error ? 'error' : 'idle'} loadingText="Removing..." errorText="Retry removal" disabled={pending} onClick={confirmRemove}>Remove from team</StatefulButton></div>
     </div> : <div className="adm-catalog-roster">
       <div className="adm-catalog-roster-heading"><h3>Team members</h3><Button type="button" onClick={() => setAdding(true)} disabled={team.is_active === false}><Plus size={16} /> Add member</Button></div>
       {team.is_active === false && <p className="adm-catalog-hint">Reactivate this team to add members. Existing assignments remain visible.</p>}
@@ -192,7 +196,7 @@ function TeamRoster({ team, onClose }) {
   </AdminDialog>;
 }
 
-export function CatalogPanel({ kind, query, createMutation, updateMutation, skillsQuery }) {
+export function CatalogPanel({ kind, query, createMutation, updateMutation, skillsQuery, onSelectSkill }) {
   const isTeam = kind === 'team';
   const title = isTeam ? 'Teams' : 'Skills';
   const [search, setSearch] = useState('');
@@ -215,9 +219,9 @@ export function CatalogPanel({ kind, query, createMutation, updateMutation, skil
     <QueryState query={query} subject={title.toLowerCase()} empty={filtered.length === 0 ? rows.length === 0 ? `No ${title.toLowerCase()} have been created yet. Use Add ${kind} to get started.` : `No ${title.toLowerCase()} match these filters.` : null}>
       <div className={`adm-catalog-grid ${isTeam ? '' : 'adm-catalog-skills'}`}>{filtered.map(row => <article className="adm-catalog-card" key={row.id}>
         <div className="adm-catalog-card-head"><span className="adm-catalog-symbol">{isTeam ? <Users size={20} /> : <Tags size={20} />}</span><span className={`adm-catalog-status ${row.is_active === false ? 'is-inactive' : ''}`}><i />{row.is_active === false ? 'Inactive' : 'Active'}</span></div>
-        <h3>{row.team_name || row.skill_name}</h3>
+        <h3 className={!isTeam && onSelectSkill ? 'adm-catalog-clickable-title' : ''} onClick={() => !isTeam && onSelectSkill?.(row)}>{row.team_name || row.skill_name}</h3>
         {isTeam ? <><p className="adm-catalog-count"><strong>{row.member_count}</strong> {row.member_count === 1 ? 'member' : 'members'} assigned</p><div className="adm-catalog-tags">{(row.required_skills || []).length ? row.required_skills.map(id => <span key={id}>{skillsQuery.data?.find(skill => skill.id === id)?.skill_name || 'Skill unavailable'}</span>) : <span className="is-empty">No required skills</span>}</div></> : <p className="adm-catalog-description">{row.skill_desc || 'No description added.'}</p>}
-        <div className="adm-catalog-card-actions">{isTeam && <Button type="button" variant="secondary" onClick={() => setRosterId(row.id)}>View members <ArrowRight size={15} /></Button>}<div className="adm-catalog-utilities">
+        <div className="adm-catalog-card-actions">{isTeam ? <Button type="button" variant="secondary" onClick={() => setRosterId(row.id)}>View members <ArrowRight size={15} /></Button> : onSelectSkill ? <Button type="button" variant="secondary" onClick={() => onSelectSkill(row)}>View students <ArrowRight size={15} /></Button> : null}<div className="adm-catalog-utilities">
           {row.is_protected ? <span className="adm-catalog-protected" title="Standard catalog entries are protected from editing and deactivation."><LockKeyhole size={14} /> Protected</span> : <><Button type="button" variant="ghost" onClick={() => setEditor({ mode: 'edit', record: row })} disabled={mutationPending} aria-label={`Edit ${row.team_name || row.skill_name}`}><Pencil size={15} /><span>Edit</span></Button><Button type="button" variant="ghost" disabled={mutationPending} onClick={() => setActivityRecord(row)} aria-label={`${row.is_active === false ? 'Reactivate' : 'Deactivate'} ${row.team_name || row.skill_name}`}>{row.is_active === false ? <CirclePlay size={17} /> : <CirclePause size={17} />}<span>{row.is_active === false ? 'Reactivate' : 'Deactivate'}</span></Button></>}
         </div></div>
       </article>)}</div>

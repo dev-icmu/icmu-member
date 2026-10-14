@@ -17,11 +17,11 @@ export const useSkills = () => useQuery({
 function skillPayload(payload) {
   const result = {};
   if ('skill_name' in payload) {
-    result.skill_name = payload.skill_name.trim();
+    result.skill_name = payload.skill_name.trim().replace(/\s+/g, ' ').toLowerCase();
     if (!result.skill_name || result.skill_name.length > 50) throw new Error('Use a skill name between 1 and 50 characters.');
   }
   if ('skill_desc' in payload) {
-    result.skill_desc = (payload.skill_desc || '').trim();
+    result.skill_desc = (payload.skill_desc || '').trim().toLowerCase();
     if (result.skill_desc.length > 50) throw new Error('Keep the description within 50 characters.');
   }
   if (typeof payload.is_active === 'boolean') result.is_active = payload.is_active;

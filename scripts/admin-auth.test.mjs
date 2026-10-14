@@ -194,3 +194,25 @@ test('tab focus preserves the mounted workspace until verification denies access
     else globalThis.document = previousDocument;
   }
 });
+
+test('formatRole accurately displays roles with Title Case and special handling for admin variations', async () => {
+  const { formatRole } = await import('../src/features/admin/lib/formatRole.js');
+  assert.equal(formatRole('super_admin'), 'Super Admin');
+  assert.equal(formatRole('super-admin'), 'Super Admin');
+  assert.equal(formatRole('superadmin'), 'Super Admin');
+  assert.equal(formatRole('admin'), 'Admin');
+  assert.equal(formatRole('broadcaster'), 'Broadcaster');
+  assert.equal(formatRole('chief_editor'), 'Chief Editor');
+  assert.equal(formatRole('authenticated'), 'Admin');
+  assert.equal(formatRole(null), 'Admin');
+  assert.equal(formatRole(undefined), 'Admin');
+  assert.equal(formatRole(''), 'Admin');
+});
+
+test('resolveAdminSession syncs bridge role into user app_metadata', async () => {
+  const h = harness();
+  h.client.functions.invoke = async () => ({ data: { allowed: true, role: 'super_admin' }, error: null });
+  const result = await resolveAdminSession(h.client);
+  assert.equal(result.isAdmin, true);
+  assert.equal(result.user.app_metadata.role, 'super_admin');
+});

@@ -30,7 +30,12 @@ export function ComboboxContent({
   const [morphReady, setMorphReady] = useState(false);
   const layout = usePopoverPortalPosition(context.triggerRef, measureRef, portalReady);
 
-  useEffect(() => setPortalReady(true), []);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setPortalReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  // Collision measurements must resolve before paint to avoid a visible side jump.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
     if (!portalReady) return;
     const readyFrame = requestAnimationFrame(() => setMorphReady(true));
@@ -61,6 +66,7 @@ export function ComboboxContent({
       setActualSide("bottom");
     else setActualSide(side);
   }, [avoidCollisions, context.open, layout, side, sideOffset]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!portalReady) return null;
 
@@ -130,5 +136,5 @@ export function ComboboxContent({
       }>
       {children}
     </motion.div>
-  </motion.div>, document.body);
+  </motion.div>, context.triggerRef.current?.closest('dialog') ?? document.body);
 }

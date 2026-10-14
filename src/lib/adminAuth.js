@@ -35,6 +35,9 @@ export async function resolveAdminSession(client) {
   if (user.app_metadata?.identity_provider === 'icmu-web') {
     const response = await invokeAdminBridge(client, { action: 'refresh' });
     if (response?.allowed !== true) throw new Error('This account does not have active admin access.');
+    if (response?.role && user.app_metadata) {
+      user.app_metadata.role = response.role;
+    }
   }
   const { data: allowed, error: accessError } = await timeout(client.rpc('admin_access'));
   if (accessError) throw new Error('Admin access could not be checked. Please try again.');

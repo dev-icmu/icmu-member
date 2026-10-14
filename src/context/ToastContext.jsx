@@ -10,6 +10,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={toastAPI}>
       {children}
       <AnimatedToastStack
+        className="icmu-toast-stack"
         toasts={toastAPI.toasts}
         onDismiss={toastAPI.dismissToast}
         position="bottom-center"

@@ -53,17 +53,17 @@ export const useRegistrationForm = () => {
     if (step === 1) {
       if (!formData.index_number.trim()) newErrors.index_number = 'Index number is required.';
       if (!formData.full_name.trim()) newErrors.full_name = 'Full name is required.';
-      if (!formData.name_with_initials.trim()) newErrors.name_with_initials = 'Name with initials is required.';
       if (!formData.date_of_birth) newErrors.date_of_birth = 'Date of birth is required.';
       if (!formData.whatsapp_number.trim()) newErrors.whatsapp_number = 'WhatsApp number is required.';
       else if (!/^\+[1-9]\d{1,14}$/.test(coercedMemberPhone)) newErrors.whatsapp_number = 'Enter a valid Sri Lankan number (e.g. 077 123 4567).';
       if (!formData.email_address.trim()) newErrors.email_address = 'Email address is required.';
+      if (!formData.city || !formData.city.trim()) newErrors.city = 'City is required.';
     } else if (step === 2) {
       if (!formData.guardian_name.trim()) newErrors.guardian_name = 'Guardian name is required.';
       if (!formData.guardian_contact.trim()) newErrors.guardian_contact = 'Guardian contact number is required.';
       else if (!/^\+[1-9]\d{1,14}$/.test(coercedGuardianPhone)) newErrors.guardian_contact = 'Enter a valid Sri Lankan number (e.g. 077 123 4567).';
     } else if (step === 3) {
-      if (!formData.skills || formData.skills.length === 0) newErrors.skills = 'Please select at least one relevant skill.';
+      // Skills are optional
     }
 
     setErrors(newErrors);
@@ -114,7 +114,6 @@ export const useRegistrationForm = () => {
     const rawPayload = {
       index_number: formData.index_number,
       full_name: formData.full_name,
-      name_with_initials: formData.name_with_initials,
       date_of_birth: formData.date_of_birth,
       joined_date: formData.joined_date,
       city: formData.city || 'Colombo',

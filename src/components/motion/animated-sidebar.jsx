@@ -537,7 +537,10 @@ export const AnimatedSidebarTrigger = forwardRef(function AnimatedSidebarTrigger
       data-state={expanded ? "expanded" : "collapsed"}
       onClick={(event) => {
         onClick?.(event);
-        if (!event.defaultPrevented) context.toggleSidebar();
+        if (!event.defaultPrevented) {
+          context.setTriggerRef(event.currentTarget);
+          context.toggleSidebar();
+        }
       }}
       className={cn(
         "inline-flex size-10 shrink-0 items-center justify-center rounded-xl outline-none",
@@ -720,7 +723,7 @@ export const AnimatedSidebarMenu = forwardRef(function AnimatedSidebarMenu(
       pillClassName="rounded-xl bg-muted/70"
       pillContainerClassName="inset-y-auto top-0 h-9"
       data-slot="sidebar-menu"
-      className={cn("flex w-full min-w-0 list-none flex-col gap-0.5", className)}
+      className={cn("flex w-full min-w-0 list-none flex-col gap-3", className)}
     >
       {children}
     </SharedLayoutBg>
@@ -870,6 +873,7 @@ export function AnimatedSidebarMenuButton({
   children,
   icon,
   badge,
+  badgeClassName,
   href,
   isActive = false,
   ariaExpanded,
@@ -945,9 +949,20 @@ export function AnimatedSidebarMenuButton({
         {children}
       </motion.span>
       {badge && !panel.collapsed ? (
-        <span className="relative z-10 shrink-0 text-xs text-muted-foreground">
+        <span
+          className={cn(
+            "relative z-10 shrink-0 text-xs text-muted-foreground",
+            badgeClassName,
+          )}
+        >
           {badge}
         </span>
+      ) : null}
+      {badge && panel.collapsed ? (
+        <span
+          aria-hidden="true"
+          className="absolute top-2 right-2 z-10 size-2 rounded-full bg-[var(--admin-accent,#49c977)] shadow-[0_0_8px_rgba(73,201,119,0.8)]"
+        />
       ) : null}
       {ariaExpanded !== undefined ? (
         <motion.span

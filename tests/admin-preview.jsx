@@ -1,7 +1,7 @@
 // Isolated browser fixture. Not imported by the application or included in its build.
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthContext } from '../src/context/AuthContext';
 import { ToastProvider } from '../src/context/ToastContext';
@@ -18,6 +18,11 @@ const teams=[{id:uuid(800),team_name:'Production crew',is_active:true,is_protect
 const members=Array.from({length:47},(_,i)=>({id:uuid(i+1),full_name:`Sample Member ${String(i+1).padStart(2,'0')}`,name_with_initials:`S. Member ${i+1}`,member_id:i<30?`12M${String(i+1).padStart(3,'0')}`:null,index_number:`20${100+i}`,batch_year:2012,date_of_birth:'2012-04-10',joined_date:'2026-09-10',created_at:`2026-09-${String(i%28+1).padStart(2,'0')}T06:00:00Z`,updated_at:'2026-10-14T06:00:00Z',membership_status:i<30?'accepted':i<43?'pending':'rejected',is_active:i!==4,city:'Colombo',whatsapp_number:'+94770000000',email_address:`sample${i+1}@example.invalid`,interests:[skills[i%3].id],guardian:{id:uuid(100+i),guardian_name:'Sample Guardian',contact_number:'+94771111111',occupation:'Sample occupation'},member_team_assignment:[]}));
 members.forEach((member,index)=>Object.assign(member,{form_number:String(index+1).padStart(4,'0'),application_source:'paper',school_class:'9 A',address:'Example address, Colombo',other_skills:'',fee_amount:500,fee_paid_at:index===31?null:'2026-10-14T06:00:00Z',processed_by_name:'Sample Admin',approved_by_name:member.member_id?'Sample Admin':null}));
 const response=(data,count,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})}});
+members.forEach((member,index)=>{
+  member.batch_year=2010+index%3;
+  member.date_of_birth=`${member.batch_year}-04-10`;
+  if(member.member_id)member.member_id=`${String(member.batch_year).slice(-2)}M${String(index+1).padStart(3,'0')}`;
+});
 function analytics(){return {counts:{total:members.length,accepted:members.filter(m=>m.membership_status==='accepted').length,pending:members.filter(m=>m.membership_status==='pending').length,rejected:members.filter(m=>m.membership_status==='rejected').length,active:members.filter(m=>m.membership_status==='accepted'&&m.is_active).length,inactive:members.filter(m=>m.membership_status==='accepted'&&!m.is_active).length,teams:teams.filter(t=>t.is_active).length,skills:skills.filter(s=>s.is_active).length},monthly:['May','Jun','Jul','Aug','Sep','Oct'].map((label,i)=>({label,month:`2026-${i+5}`,applications:[1,4,2,8,19,13][i],accepted:0})),batches:[{batch_year:2012,count:30}],interests:skills.map(s=>({id:s.id,name:s.skill_name,count:members.filter(m=>m.interests.includes(s.id)).length})),teams:teams.map(t=>({id:t.id,name:t.team_name,count:members.filter(m=>m.member_team_assignment.some(a=>a.team_id===t.id)).length})),recent:members.slice(-5)}};
 const originalFetch=window.fetch.bind(window);
 window.fetch=async (input,init={})=>{
@@ -25,9 +30,21 @@ window.fetch=async (input,init={})=>{
   if(url.origin===location.origin)return originalFetch(input,init);
   if(!url.pathname.startsWith('/rest/v1/'))return response({message:'External requests are disabled in this local fixture'},undefined,403);
   const path=url.pathname.split('/').at(-1);const body=init.body?JSON.parse(init.body):{};const method=init.method||'GET';
+  if(path==='admin_membership_revenue'){
+    const paid=members.filter(m=>m.fee_paid_at);return response({total:paid.reduce((sum,m)=>sum+m.fee_amount,0),payments:paid.length,missing_amounts:0,approved:paid.filter(m=>m.membership_status==='accepted').reduce((sum,m)=>sum+m.fee_amount,0),pending:paid.filter(m=>m.membership_status==='pending').reduce((sum,m)=>sum+m.fee_amount,0),rejected:paid.filter(m=>m.membership_status==='rejected').reduce((sum,m)=>sum+m.fee_amount,0)});
+  }
   if(path==='admin_member_analytics')return response(analytics());
+  if(path==='admin_application_activity'){
+    const monthly=['6m','1y'].includes(body.p_period); const length={'7d':7,'30d':30,'6m':6,'1y':12}[body.p_period];
+    const now=new Date();const points=Array.from({length},(_,i)=>{
+      const date=monthly?new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-length+1+i,1)):new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-length+1+i));
+      const key=date.toISOString().slice(0,monthly?7:10);
+      return {label:date.toLocaleDateString('en-GB',{timeZone:'UTC',month:'short',...(monthly?{year:'2-digit'}:{day:'numeric'})}),applications:members.filter(m=>m.created_at.startsWith(key)).length};
+    });return response({points,total:points.reduce((sum,p)=>sum+p.applications,0),has_enough_data:points.filter(p=>p.applications>0).length>=2});
+  }
+  if(path==='admin_member_batches')return response([...new Set(members.map(m=>m.batch_year))].map(batch_year=>({batch_year,total:members.filter(m=>m.batch_year===batch_year).length})));
   if(path==='member'){
-    let rows=[...members];for(const key of ['membership_status','is_active','id']){if(url.searchParams.has(key)){const value=url.searchParams.get(key).slice(3);rows=rows.filter(m=>String(m[key])===value);}}
+    let rows=[...members];for(const key of ['membership_status','is_active','id','batch_year']){if(url.searchParams.has(key)){const value=url.searchParams.get(key).slice(3);rows=rows.filter(m=>String(m[key])===value);}}
     if(url.searchParams.get('or')){const q=url.searchParams.get('or').match(/ilike\."%(.+?)%"/)?.[1]?.toLowerCase();if(q)rows=rows.filter(m=>[m.full_name,m.member_id,m.form_number,m.email_address,m.index_number].some(x=>x?.toLowerCase().includes(q)));}
     const count=rows.length;const from=Number(url.searchParams.get('offset')||0);const limit=Number(url.searchParams.get('limit')||20);rows=rows.slice(from,from+limit);
     const accept=new Headers(init.headers).get('accept');return response(accept?.includes('vnd.pgrst.object')?rows[0]:rows,count);
@@ -51,19 +68,60 @@ window.fetch=async (input,init={})=>{
     const rows=members.flatMap(m=>m.member_team_assignment.filter(a=>a.team_id===teamId).map(a=>({...a,member:{id:m.id,full_name:m.full_name,member_id:m.member_id,index_number:m.index_number,membership_status:m.membership_status,is_active:m.is_active}})));
     const from=Number(url.searchParams.get('offset')||0);const limit=Number(url.searchParams.get('limit')||8);return response(rows.slice(from,from+limit),rows.length);
   }
-  if(['approve_member','admin_review_member','admin_set_member_active','admin_save_member'].includes(path)){
+  if(path==='admin_whatsapp_status')return response({status:'not_requested'});
+  if(['approve_member','approve_member_with_notification','admin_review_member','admin_set_member_active','admin_save_member'].includes(path)){
     let member=members.find(m=>m.id===body.p_id);
     if(path==='admin_save_member'){
       if(!member){member={...members[0],id:crypto.randomUUID(),member_id:null,membership_status:'pending',created_at:new Date().toISOString(),member_team_assignment:[]};members.push(member);}
-      Object.assign(member,body.p_payload);if('fee_received' in body.p_payload)member.fee_paid_at=body.p_payload.fee_received?new Date().toISOString():null;return response({id:member.id});
+      Object.assign(member,body.p_payload);
+      for(const name of body.p_payload.custom_skills || []) {
+        let skill=skills.find(s=>s.skill_name.toLowerCase()===name);
+        if(!skill){skill={id:crypto.randomUUID(),skill_name:name,is_active:true,is_protected:false};skills.push(skill);}
+        member.interests=[...new Set([...(member.interests || []),skill.id])];
+      }
+      if('fee_received' in body.p_payload)member.fee_paid_at=body.p_payload.fee_received?new Date().toISOString():null;return response({id:member.id});
     }
-    if(path==='approve_member'){if(member.application_source==='paper'&&!member.fee_paid_at)return response({message:'Record the received fee before approval'},undefined,400);member.membership_status='accepted';member.member_id='12M048';member.approved_by_name='Sample Admin';return response(member.member_id);}
+    if(['approve_member','approve_member_with_notification'].includes(path)){if(member.application_source==='paper'&&!member.fee_paid_at)return response({message:'Record the received fee before approval'},undefined,400);member.membership_status='accepted';member.member_id='12M048';member.approved_by_name='Sample Admin';return response(member.member_id);}
     if(path==='admin_review_member')member.membership_status=body.p_status;
     if(path==='admin_set_member_active')member.is_active=body.p_active;
     return response({id:member.id});
   }
   return response({message:'Unimplemented fixture request'},undefined,400);
 };
-const initial=new URLSearchParams(location.search).get('route')||'/admin';
+const previewOptions=new URLSearchParams(location.search);
+const initial=previewOptions.get('route')||'/admin';
+const logoutMode=previewOptions.get('logout')||'success';
+const requestedDelay=Number(previewOptions.get('logoutDelay')??600);
+const logoutDelay=Number.isFinite(requestedDelay)?Math.max(0,Math.min(requestedDelay,5000)):600;
 const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});
-createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><AuthContext.Provider value={{user:{id:uuid(999),app_metadata:{display_name:'Sample Admin',web_index:'TEST'}},isAdmin:true,isAuthenticated:true,logout:async()=>{}}}><ToastProvider><MemoryRouter initialEntries={[initial]}><AdminWorkspace/></MemoryRouter></ToastProvider></AuthContext.Provider><div style={{position:'fixed',bottom:0,right:0,padding:'3px 8px',fontSize:9,background:'#382e10',color:'#e9dca9',zIndex:100}}>LOCAL UI TEST · SYNTHETIC DATA</div></QueryClientProvider>);
+
+export function PreviewSession() {
+  const [signedIn,setSignedIn]=useState(initial!=='/login');
+  const logoutAttempts=useRef(0);
+  const navigate=useNavigate();
+  async function logout() {
+    logoutAttempts.current+=1;
+    const attempt=logoutAttempts.current;
+    await new Promise(resolve=>setTimeout(resolve,logoutDelay));
+    if(logoutMode==='error'||(logoutMode==='error-once'&&attempt===1))throw new Error('Preview sign out failed. Please try again.');
+    setSignedIn(false);
+  }
+  function returnToWorkspace() {
+    setSignedIn(true);
+    navigate(initial.startsWith('/admin')?initial:'/admin',{replace:true});
+  }
+  return <AuthContext.Provider value={{user:signedIn?{id:uuid(999),app_metadata:{display_name:'Sample Admin',web_index:'TEST',role:'super_admin'}}:null,isAdmin:signedIn,isAuthenticated:signedIn,logout}}>
+    <Routes>
+      <Route path="/admin/*" element={signedIn?<AdminWorkspace/>:<Navigate to="/login" replace/>}/>
+      <Route path="/login" element={<main style={{minHeight:'100svh',display:'grid',placeContent:'center',gap:16,padding:32,maxWidth:580,margin:'auto'}}>
+        <p style={{color:'#a7b6ad',fontSize:12}}>LOCAL SIGN-IN PREVIEW</p>
+        <h1 style={{fontSize:28,fontWeight:600}}>{signedIn?'Sign-in preview':'You are signed out'}</h1>
+        <p style={{color:'#a7b6ad'}}>This local test uses a synthetic account. No real sign-in or sign-out requests are sent.</p>
+        <button type="button" onClick={returnToWorkspace} style={{minHeight:44,padding:'12px 20px',borderRadius:24,background:'#2da84d',color:'#061b0c',fontWeight:600,cursor:'pointer'}}>Return to workspace</button>
+      </main>}/>
+      <Route path="*" element={<Navigate to={signedIn?'/admin':'/login'} replace/>}/>
+    </Routes>
+  </AuthContext.Provider>;
+}
+
+createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={[initial]}><PreviewSession/></MemoryRouter></ToastProvider><div style={{position:'fixed',bottom:0,right:0,padding:'3px 8px',fontSize:9,background:'#382e10',color:'#e9dca9',zIndex:100}}>LOCAL UI TEST · SYNTHETIC DATA</div></QueryClientProvider>);

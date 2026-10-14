@@ -1,16 +1,44 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, Plus, X, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
+import { StatefulButton } from '@/components/motion/button/stateful';
+import { Input } from '@/components/motion/input';
+import { OTPInput } from '@/components/motion/otp-input';
+import { Checkbox } from '@/components/motion/checkbox';
+import { Combobox, ComboboxTrigger, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty } from '@/components/motion/combobox';
+import { SRI_LANKAN_CITIES } from '@/utils/sri-lankan-cities';
 import { useAdminCreateMember, useMember, useUpdateMember } from '@/entities/members/hooks/useMembers';
 import { useSkills } from '@/entities/skills/hooks/useSkills';
+import { MEMBERSHIP_FEE_LKR, normalizeApplicationText } from '@/entities/members/lib/memberPayload';
+import { applicationSteps, stepFields, colomboToday, dateDigits, dateFromDigits, localPhone, fieldValue, applicationFieldError } from '@/entities/members/lib/applicationForm';
+import { displayDate } from '@/entities/members/lib/memberDisplay';
 import { useToast } from '@/context/ToastContext';
 import { AdminDialog } from './AdminDialog';
-
-const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+import { ApplicationDialog } from './ApplicationDialog';
+import '../application.css';
 
 export function memberError(error) {
-  if (error?.code === '23505') return 'A member with this form number, school index or email already exists. Check the member list before adding another record.';
+  if (error?.code === '23505') return 'This form number, admission number or email already exists. Check the member list before adding another application.';
   if (error?.code === '42501') return 'Your admin access could not be verified. Sign in again and retry.';
   return error?.message || 'The change could not be saved. Please try again.';
+}
+
+function ApplicationField({ name, label, value, onChange, onBlur, error, touched, digits, hint, wide, disabled, groups, phone, ...props }) {
+  const status = error ? 'error' : touched && value ? 'success' : 'idle';
+  return <div className={`application-field ${wide ? 'application-field-wide' : ''}`} data-field={name}>
+    {digits ? <OTPInput name={name} label={label} length={digits} value={value} onChange={onChange} onBlur={onBlur}
+      status={status} errorMessage={error} hint={hint} disabled={disabled} groups={groups}
+      normalizePaste={phone ? localPhone : undefined} autoComplete={phone ? 'tel-national' : 'off'} placeholder={props.placeholder} />
+      : <><Input name={name} label={label} value={value} onChange={onChange} onBlur={onBlur} error={error}
+        success={status === 'success'} disabled={disabled} autoComplete="off" classNames={{ field: 'application-input-shell' }} {...props} />
+      {hint && <small>{hint}</small>}</>}
+  </div>;
+}
+
+function StepHeading({ step }) {
+  const heading = useRef(null);
+  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
+  return <div className="application-step-heading"><h3 tabIndex={-1} ref={heading}>{applicationSteps[step].title === 'Student' ? 'Personal information' : applicationSteps[step].title === 'Guardian' ? 'Guardian details' : applicationSteps[step].title === 'Skills' ? 'Relevant skills (optional)' : 'Review your application'}</h3><p>{applicationSteps[step].description}</p></div>;
 }
 
 function MemberForm({ member, onClose }) {
@@ -19,157 +47,176 @@ function MemberForm({ member, onClose }) {
   const skills = useSkills();
   const { addToast } = useToast();
   const locked = useRef(false);
+  const [step, setStep] = useState(0);
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
+  const [skillDraft, setSkillDraft] = useState('');
+  const [skillError, setSkillError] = useState('');
   const isPaper = !member || member.application_source === 'paper';
+  const isApproved = member?.membership_status === 'accepted';
+  const isPaidAndApproved = isApproved && Boolean(member?.fee_paid_at);
   const [form, setForm] = useState(() => ({
     full_name: member?.full_name || '',
-    name_with_initials: member?.name_with_initials || '',
-    index_number: member?.index_number || '',
-    date_of_birth: member?.date_of_birth || '',
-    joined_date: member?.joined_date || today(),
-    city: member?.city || '',
-    whatsapp_number: member?.whatsapp_number || '',
-    email_address: member?.email_address || '',
+    index_number: member?.index_number || '', date_of_birth: member?.date_of_birth || '',
+    joined_date: member?.joined_date || colomboToday(), city: member?.city || '',
+    whatsapp_number: localPhone(member?.whatsapp_number), email_address: member?.email_address || '',
     form_number: member?.form_number || '',
-    school_class: member?.school_class || '',
-    address: member?.address || '',
-    other_skills: member?.other_skills || '',
-    fee_amount: member ? member.fee_amount ?? '' : 500,
-    fee_received: Boolean(member?.fee_paid_at),
-    interests: member?.interests || [],
-    guardian: {
-      guardian_name: member?.guardian?.guardian_name || '',
-      contact_number: member?.guardian?.contact_number || '',
-      occupation: member?.guardian?.occupation || '',
-    },
+    fee_received: Boolean(member?.fee_paid_at), interests: member?.interests || [], custom_skills: [],
+    guardian: { guardian_name: member?.guardian?.guardian_name || '', contact_number: localPhone(member?.guardian?.contact_number), occupation: member?.guardian?.occupation || '' },
   }));
   const busy = create.isPending || update.isPending;
-  const feeAmountRequired = isPaper || form.fee_received || member?.fee_amount != null;
-  const set = (name, value) => setForm(old => ({ ...old, [name]: value }));
-  const guardianSet = (name, value) => setForm(old => ({ ...old, guardian: { ...old.guardian, [name]: value } }));
+  const set = (name, value) => {
+    setError('');
+    setForm(old => ['guardian_name', 'contact_number', 'occupation'].includes(name)
+      ? { ...old, guardian: { ...old.guardian, [name]: value } } : { ...old, [name]: value });
+  };
+  const getError = name => applicationFieldError(name, fieldValue(form, name), { isPaper, form });
+  const field = (name, label, props = {}) => <ApplicationField key={name} name={name} label={label}
+    value={fieldValue(form, name)} onChange={value => set(name, value)}
+    onBlur={() => setTouched(old => ({ ...old, [name]: true }))}
+    error={touched[name] ? getError(name) : ''} touched={touched[name]} {...props} />;
+  const dateField = (name, label, disabled = false) => <div className="application-date" key={name}>{field(name, label, { digits: 8, groups: [4, 6], disabled,
+    value: dateDigits(form[name]), onChange: value => set(name, dateFromDigits(value)), placeholder: 'YYYYMMDD',
+    hint: disabled ? 'Locked after the member ID is issued.' : 'Year · month · day. Type the digits or pick a date.' })}
+    {!disabled && <input type="date" aria-label={`Choose ${label.replace(' *', '').toLowerCase()}`} className="application-date-picker"
+      value={/^\d{4}-\d{2}-\d{2}$/.test(form[name]) ? form[name] : ''} min={name === 'date_of_birth' ? '1940-01-01' : form.date_of_birth}
+      max={colomboToday()} onChange={event => { set(name, event.target.value); setTouched(old => ({ ...old, [name]: true })); }} />}
+  </div>;
+  const phoneField = (name, label) => {
+    const value = fieldValue(form, name);
+    // Preserve previously recorded international numbers without truncating them.
+    return field(name, label, value.startsWith('+') ? { type: 'tel', maxLength: 20, hint: 'Existing international number.' }
+      : { digits: 10, phone: true, groups: [3, 6], placeholder: '0701234567', hint: '10 digits, starting with 0. You can paste a +94 number.' });
+  };
+
+  function goTo(next) {
+    setError('');
+    if (next > step) {
+      const names = stepFields.slice(0, next).flat();
+      setTouched(old => ({ ...old, ...Object.fromEntries(names.map(name => [name, true])) }));
+      const invalid = names.find(name => getError(name));
+      if (invalid) {
+        const invalidStep = stepFields.findIndex(fields => fields.includes(invalid));
+        setStep(invalidStep);
+        requestAnimationFrame(() => document.querySelector(`.adm-application-modal [name="${invalid}"]`)?.focus());
+        return;
+      }
+      if (next > 2 && (skills.isPending || skills.isError)) { setError('Load the skill list before continuing.'); return; }
+      if (next > 2 && skillDraft.trim()) { setSkillError('Add this skill, or clear the text before continuing.'); setStep(2); return; }
+    }
+    setStep(next);
+  }
+
+  function addSkill() {
+    const name = normalizeApplicationText(skillDraft);
+    if (!name || name.length > 50) { setSkillError('Enter a skill name with 1 to 50 characters.'); return; }
+    const existing = skills.data?.find(skill => normalizeApplicationText(skill.skill_name) === name);
+    if (existing) {
+      if (!existing.is_active && !form.interests.includes(existing.id)) { setSkillError('This skill is inactive. Restore it in Skills before selecting it.'); return; }
+      set('interests', [...new Set([...form.interests, existing.id])]);
+    } else if (!form.custom_skills.includes(name)) {
+      if (form.custom_skills.length >= 20) { setSkillError('You can add up to 20 new skills.'); return; }
+      set('custom_skills', [...form.custom_skills, name]);
+    }
+    setSkillDraft(''); setSkillError('');
+  }
 
   async function save(event) {
     event.preventDefault();
-    if (locked.current) return;
-    locked.current = true;
-    setError('');
+    if (step < 3) { goTo(step + 1); return; }
+    const invalid = stepFields.flat().find(name => getError(name));
+    if (invalid) { setTouched(Object.fromEntries(stepFields.flat().map(name => [name, true]))); setStep(stepFields.findIndex(fields => fields.includes(invalid))); return; }
+    if (locked.current || skills.isPending || skills.isError) return;
+    locked.current = true; setError('');
     try {
       const payload = { ...form };
-      if (form.fee_amount === '') delete payload.fee_amount;
-      else payload.fee_amount = Number(form.fee_amount);
-      if (member && form.fee_received === Boolean(member.fee_paid_at)) delete payload.fee_received;
+      if (isPaidAndApproved) {
+        delete payload.fee_received;
+        delete payload.fee_amount;
+      } else if (member && form.fee_received === Boolean(member.fee_paid_at)) {
+        delete payload.fee_received;
+      }
       if (!member) payload.application_source = 'paper';
-      if (member) await update.mutateAsync({ id: member.id, payload });
-      else await create.mutateAsync(payload);
-      addToast({
-        type: 'success',
-        message: member ? 'Member details saved.' : 'Paper form saved to pending applications. Review and approve when ready.',
-      });
+      if (member) await update.mutateAsync({ id: member.id, payload }); else await create.mutateAsync(payload);
+      addToast({ type: 'success', message: member ? 'Member details saved.' : 'Application submitted. Review and approve it to issue a member ID.' });
       onClose();
-    } catch (err) {
-      setError(memberError(err));
-    } finally {
-      locked.current = false;
-    }
+    } catch (err) { setError(memberError(err)); } finally { locked.current = false; }
   }
 
-  const studentFields = [
-    { name: 'full_name', label: 'Full name', type: 'text', maxLength: 200, required: true },
-    { name: 'name_with_initials', label: 'Name with initials', type: 'text', maxLength: 100, required: true, hint: 'Enter initials and surname for the member record.' },
-    { name: 'index_number', label: 'School index number', type: 'text', maxLength: 20 },
-    { name: 'school_class', label: 'Class', type: 'text', maxLength: 30, required: isPaper, placeholder: 'e.g. 9 A' },
-    { name: 'date_of_birth', label: 'Date of birth', type: 'date', required: true },
-    { name: 'whatsapp_number', label: 'WhatsApp number', type: 'tel', maxLength: 20, required: true, placeholder: '+94 77 123 4567' },
-    { name: 'email_address', label: 'Email address', type: 'email', maxLength: 254 },
-    { name: 'city', label: 'City', type: 'text', maxLength: 100 },
-  ];
   const availableSkills = (skills.data || []).filter(skill => skill.is_active || form.interests.includes(skill.id));
-
-  return <AdminDialog
-    open onClose={onClose} busy={busy} wide
-    title={member ? 'Edit member' : 'Enter paper form'}
-    description={member
-      ? 'Update the form details, student information and recorded payment.'
-      : 'Enter the completed paper form and save it as pending. Approval creates the member ID.'}
-  >
-    <form onSubmit={save} className="adm-member-form">
-      {error && <div className="adm-error" role="alert">{error}</div>}
-      <fieldset disabled={busy}>
-        <legend>Paper form</legend>
-        {!isPaper && <p className="adm-paper-note">This is an existing record. Add paper form and payment details only when they are available.</p>}
-        <div className="adm-form-grid">
-          <label className="adm-field">
-            <span>Form number{isPaper && ' *'}</span>
-            <input name="form_number" type="text" value={form.form_number} onChange={event => set('form_number', event.target.value)} required={isPaper} maxLength={50} placeholder="e.g. 0001" autoComplete="off" />
-            <small>Copy the number from the paper form, including any leading zeros.</small>
-          </label>
-          <label className="adm-field">
-            <span>Date on form / joined date *</span>
-            <input name="joined_date" type="date" value={form.joined_date} onChange={event => set('joined_date', event.target.value)} required max={today()} />
-            <small>Use the date written on the form or receipt.</small>
-          </label>
-          <label className="adm-field">
-            <span>Membership fee (LKR){feeAmountRequired && ' *'}</span>
-            <input name="fee_amount" type="number" inputMode="decimal" min="0" max="999999.99" step="0.01" value={form.fee_amount} onChange={event => set('fee_amount', event.target.value)} required={feeAmountRequired} placeholder="Not recorded" />
-            <small>New forms start at LKR 500. Change this if the fee differs.</small>
-          </label>
-          <label className="adm-fee-confirmation">
-            <input name="fee_received" type="checkbox" checked={form.fee_received} onChange={event => set('fee_received', event.target.checked)} />
-            <span><strong>Membership fee received</strong><small>Tick only after checking that the payment was received.</small></span>
-          </label>
-        </div>
-        <p className="adm-paper-note">{isPaper
-          ? 'You can save an unpaid form as pending. Confirm the fee before approving the application.'
-          : 'A blank fee amount means no fee has been recorded. Existing records are not assumed to be paid.'}</p>
-      </fieldset>
-
-      <fieldset disabled={busy}>
-        <legend>Student and guardian</legend>
-        <div className="adm-form-grid">
-          {studentFields.map(({ name, label, type, maxLength, required, hint, placeholder }) => <label className="adm-field" key={name}>
-            <span>{label}{required && ' *'}</span>
-            <input name={name} value={form[name]} onChange={event => set(name, event.target.value)} type={type} maxLength={maxLength} required={required} max={type === 'date' ? today() : undefined} disabled={name === 'date_of_birth' && Boolean(member?.member_id)} autoComplete="off" placeholder={placeholder} />
-            {name === 'date_of_birth' && member?.member_id ? <small>Locked because a member ID has already been issued.</small> : hint ? <small>{hint}</small> : null}
-          </label>)}
-          <label className="adm-field adm-field-wide">
-            <span>Home address{isPaper && ' *'}</span>
-            <textarea name="address" rows={3} value={form.address} onChange={event => set('address', event.target.value)} required={isPaper} maxLength={500} autoComplete="off" />
-          </label>
-        </div>
-        <h3 className="adm-form-subheading">Parent or guardian</h3>
-        <div className="adm-form-grid">
-          {[
-            ['guardian_name', 'Guardian name', true, 150],
-            ['contact_number', 'Contact number', true, 20],
-            ['occupation', 'Occupation', false, 100],
-          ].map(([name, label, required, maxLength]) => <label className="adm-field" key={name}>
-            <span>{label}{required && ' *'}</span>
-            <input name={name} value={form.guardian[name]} type={name === 'contact_number' ? 'tel' : 'text'} required={required} maxLength={maxLength} onChange={event => guardianSet(name, event.target.value)} autoComplete="off" />
-          </label>)}
-        </div>
-      </fieldset>
-
-      <fieldset disabled={busy}>
-        <legend>Skills</legend>
-        <p className="adm-hint">Select the skills or interests marked on the form.</p>
-        {skills.isError ? <div className="adm-error" role="alert">Could not load skills. <button type="button" onClick={() => skills.refetch()}>Retry</button></div>
-          : skills.isPending ? <p role="status">Loading skills...</p>
-            : availableSkills.length ? <div className="adm-checks">{availableSkills.map(skill => <label key={skill.id}>
-              <input type="checkbox" checked={form.interests.includes(skill.id)} onChange={event => set('interests', event.target.checked ? [...form.interests, skill.id] : form.interests.filter(id => id !== skill.id))} />
-              <span>{skill.skill_name}{!skill.is_active && ' (inactive)'}</span>
-            </label>)}</div> : <p className="adm-paper-note">No skills are available yet. Record any other skills below.</p>}
-        <label className="adm-field adm-form-subheading">
-          <span>Other skills (optional)</span>
-          <textarea name="other_skills" rows={3} value={form.other_skills} onChange={event => set('other_skills', event.target.value)} maxLength={500} placeholder="Copy any other skills written on the form." />
-        </label>
-      </fieldset>
-
-      <div className="adm-dialog-actions">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button type="submit" disabled={busy || skills.isPending}>{busy ? 'Saving...' : member ? 'Save changes' : 'Save pending application'}</Button>
+  const selectedSkills = [...form.interests.map(id => skills.data?.find(skill => skill.id === id)?.skill_name || 'Saved skill'), ...form.custom_skills];
+  const fee = member?.fee_amount ?? MEMBERSHIP_FEE_LKR;
+  return <ApplicationDialog step={step} busy={busy} onClose={onClose} title={member ? 'Edit member' : 'Submit an application'}>{closeApplication => <>
+    <nav aria-label="Application steps"><ol className="application-stepper">
+      {applicationSteps.map((item, index) => <li key={item.title} data-current={step === index} data-complete={step > index}>
+        <button type="button" disabled={busy} aria-current={step === index ? 'step' : undefined} onClick={() => goTo(index)} aria-label={`Step ${index + 1}: ${item.title}`}><span>{step > index ? <Check size={14} /> : index + 1}</span><strong>{item.title}</strong></button>
+      </li>)}
+    </ol></nav>
+    <form noValidate onSubmit={save} className="application-form">
+      <div className="application-scroll">
+        <StepHeading step={step} />
+        {error && <div role="alert" className="adm-error">{error}</div>}
+        <fieldset disabled={busy} className="application-fields">
+          <legend className="sr-only">{applicationSteps[step].title}</legend>
+          {step === 0 && <div className="application-grid">
+            {field('form_number', 'Form number *', { digits: 4, placeholder: '0001', disabled: Boolean(member?.member_id), hint: member?.member_id ? 'Locked after approval and ID issuance.' : 'Copy all four digits, including leading zeros.' })}
+            {field('index_number', 'Admission number *', { digits: 5, placeholder: '29012', hint: 'The student’s school admission number.' })}
+            {field('full_name', 'Full name *', { maxLength: 200, wide: true, placeholder: 'e.g. Rathnayaka Mudiyanselage Palle Gedara Thamindu Hasarinda.', hint: 'Write the full name or use initials, exactly as on the form. For example: Rathnayaka Mudiyanselage Palle Gedara Thamindu Hasarinda.' })}
+            {dateField('date_of_birth', 'Date of birth *', Boolean(member?.member_id))}
+            {phoneField('whatsapp_number', 'WhatsApp number *')}
+            {field('email_address', 'Email address *', { type: 'email', maxLength: 254, placeholder: 'student@example.com' })}
+            <div className="application-field application-city" data-field="city">
+              <label>City / town *</label>
+              <Combobox value={normalizeApplicationText(form.city)} disabled={busy} onValueChange={value => { set('city', value); setTouched(old => ({ ...old, city: true })); }}>
+                <ComboboxTrigger><ComboboxInput name="city" aria-label="City / town" placeholder="Search cities, e.g. Colombo" aria-invalid={Boolean(touched.city && getError('city'))} aria-describedby={touched.city && getError('city') ? 'application-city-error' : undefined} /></ComboboxTrigger>
+                <ComboboxContent className="application-city-options"><ComboboxList><ComboboxEmpty>No matching cities. Try a nearby town.</ComboboxEmpty>
+                  {[...new Set([...SRI_LANKAN_CITIES.map(normalizeApplicationText), ...(form.city ? [normalizeApplicationText(form.city)] : [])])].map(city => <ComboboxItem key={city} value={city}>{city}</ComboboxItem>)}
+                </ComboboxList></ComboboxContent>
+              </Combobox>
+              {touched.city && getError('city') && <p id="application-city-error" role="alert">{getError('city')}</p>}
+            </div>
+          </div>}
+          {step === 1 && <div className="application-grid">
+            {field('guardian_name', 'Guardian full name *', { maxLength: 150, wide: true, placeholder: 'e.g. R M P G Sunil Rathnayaka' })}
+            {phoneField('contact_number', 'Guardian contact number *')}
+            {field('occupation', 'Occupation (optional)', { maxLength: 100, placeholder: 'e.g. Teacher' })}
+          </div>}
+          {step === 2 && <div className="application-skills">
+            {skills.isError ? <div className="adm-error" role="alert">Could not load skills. <button type="button" onClick={() => skills.refetch()}>Retry</button></div>
+              : skills.isPending ? <p role="status">Loading skills...</p>
+                : <><div className="application-skill-pills" aria-label="Available skills">{availableSkills.map(skill => <button type="button" key={skill.id} aria-pressed={form.interests.includes(skill.id)}
+                  onClick={() => set('interests', form.interests.includes(skill.id) ? form.interests.filter(id => id !== skill.id) : [...form.interests, skill.id])}>
+                  {form.interests.includes(skill.id) ? <Check size={15} /> : <Plus size={15} />}<span>{skill.skill_name}{!skill.is_active && ' (inactive)'}</span></button>)}</div>
+                  {!availableSkills.length && <p>No skills yet. Add the first skill below.</p>}
+                  <div className="application-add-skill"><Input label="Add a skill from the form (optional)" name="custom_skill" value={skillDraft} onChange={value => { setSkillDraft(value); setSkillError(''); }}
+                    error={skillError} maxLength={50} placeholder="e.g. live sound engineering" classNames={{ field: 'application-input-shell' }}
+                    onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addSkill(); } }} />
+                    <Button type="button" variant="secondary" onClick={addSkill}><Plus size={16} /> Add skill</Button></div>
+                  <p className="application-note">New skills are saved to the skill list when you submit this application.</p>
+                  {form.custom_skills.length > 0 && <div className="application-skill-pills application-new-skills" aria-label="New skills">{form.custom_skills.map(name => <button type="button" key={name} aria-label={`Remove ${name}`} onClick={() => set('custom_skills', form.custom_skills.filter(value => value !== name))}><span>{name}</span><small>new</small><X size={14} /></button>)}</div>}
+                </>}
+            {member?.other_skills && <p className="application-note">Previously recorded: {member.other_skills}. Select or add the matching skills above.</p>}
+            <p className="application-selection-count" aria-live="polite">{selectedSkills.length ? `${selectedSkills.length} skill${selectedSkills.length === 1 ? '' : 's'} selected` : 'No skills selected (optional). A beginner can still apply.'}</p>
+          </div>}
+          {step === 3 && <div className="application-review">
+            <dl>{[['Student', form.full_name], ['Form / admission', `${form.form_number || 'Not recorded'} / ${form.index_number || 'Not recorded'}`], ['Date of birth', form.date_of_birth], ['City / town', form.city], ['WhatsApp', form.whatsapp_number], ['Email', form.email_address], ['Guardian', form.guardian.guardian_name], ['Guardian contact', form.guardian.contact_number]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not recorded'}</dd></div>)}</dl>
+            <div className="application-review-skills"><span>Skills</span><div className="application-skill-pills">{selectedSkills.length ? selectedSkills.map((name, index) => <span key={`${name}-${index}`}>{name}</span>) : <small>No skills selected</small>}</div></div>
+            {dateField('joined_date', 'Date on form / joined date *')}
+            <div className="application-fee"><ReceiptText size={24} /><div><span>Membership fee</span><strong>LKR {fee.toLocaleString('en-LK')}</strong><small>{isPaidAndApproved ? `Payment recorded on ${displayDate(member.fee_paid_at)}. Irreversible after approval.` : member?.fee_amount != null && fee !== MEMBERSHIP_FEE_LKR ? 'Previously recorded fee. This amount is kept for the receipt.' : 'Fixed membership fee'}</small></div></div>
+            <Checkbox className="application-payment" checked={form.fee_received} onCheckedChange={value => { if (!isPaidAndApproved) set('fee_received', value); }} disabled={busy || isPaidAndApproved} aria-label="Membership fee received" label={<span><strong>Membership fee received</strong><small>{isPaidAndApproved ? 'Payment confirmed and recorded. Irreversible once approved.' : 'Tick after checking the payment. An unpaid application can stay pending.'}</small></span>} />
+            {isPaidAndApproved && <div className="adm-irreversible-banner" role="status"><Check size={16} /><span>Approved & Paid: Fee payment and membership approval are permanent and cannot be reversed.</span></div>}
+            <p className="application-note">{member ? 'Your changes will update this member’s record.' : 'This application stays pending until an admin approves it. The member ID is created after approval.'}</p>
+          </div>}
+        </fieldset>
       </div>
+      <footer className="application-actions"><span>Step {step + 1} of {applicationSteps.length}</span><div>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => step ? goTo(step - 1) : closeApplication()}>{step ? <><ArrowLeft size={15} /> Back</> : 'Cancel'}</Button>
+        {step === 3
+          ? <StatefulButton type="submit" state={busy ? 'loading' : error ? 'error' : 'idle'} loadingText="Saving..." errorText="Try again" disabled={busy || skills.isPending || skills.isError}>{member ? 'Save changes' : 'Submit application'}</StatefulButton>
+          : <Button type="submit" disabled={busy || (step >= 2 && (skills.isPending || skills.isError))}>Continue <ArrowRight size={15} /></Button>}
+      </div></footer>
     </form>
-  </AdminDialog>;
+  </>}</ApplicationDialog>;
 }
 
 export function MemberEditor({ id, onClose }) {

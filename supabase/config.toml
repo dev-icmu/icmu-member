@@ -418,3 +418,7 @@ enabled = true
 # Refresh and logout verify the member bearer token inside the function.
 [functions.shared-admin-login]
 verify_jwt = false
+
+# The scheduler authenticates with a separate server-only worker secret.
+[functions.whatsapp-approval]
+verify_jwt = false
