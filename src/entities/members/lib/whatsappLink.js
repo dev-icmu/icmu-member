@@ -1,4 +1,4 @@
-import { nameWithInitials } from './memberDisplay.js';
+import { nameWithInitials, titleCase, displayDate } from './memberDisplay.js';
 
 const E164 = /^\+[1-9]\d{1,14}$/;
 const MEMBER_ID = /^\d{2}M\d{3}$/;
@@ -30,6 +30,36 @@ export function buildApprovalWhatsappLink(member) {
     '',
     'Please collect your membership receipt from the ICMU team.',
   ].join('\n');
+  return `https://wa.me/${phone.slice(1)}?text=${encodeURIComponent(text)}`;
+}
+
+export function buildFeePaymentWhatsappLink({ member, academicYear, amount, paymentMethod = 'cash', paidDate }) {
+  if (!member || typeof member.whatsapp_number !== 'string' || !academicYear) return null;
+
+  const phone = member.whatsapp_number.replace(/[\s()-]/g, '');
+  if (!E164.test(phone)) return null;
+
+  const rawName = member.name_with_initials?.trim() || nameWithInitials(member.full_name || '');
+  const name = rawName ? rawName.toUpperCase() : 'MEMBER';
+  const formattedAmount = Number(amount || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 });
+  const methodLabel = titleCase(paymentMethod || 'cash');
+  const dateStr = paidDate ? displayDate(paidDate) : displayDate(new Date().toISOString());
+
+  const text = [
+    `Hello *${name}*,`,
+    '',
+    `Payment of *LKR ${formattedAmount}* for your *Isipathana College Media Unit* annual membership fee has been received with thanks.`,
+    '',
+    `• *Academic Year:* ${academicYear}`,
+    member.member_id ? `• *Member ID:* ${member.member_id}` : null,
+    member.index_number ? `• *Admission No:* ${member.index_number}` : null,
+    `• *Amount Paid:* LKR ${formattedAmount}`,
+    `• *Payment Method:* ${methodLabel}`,
+    `• *Date Received:* ${dateStr}`,
+    '',
+    'Thank you for your active participation in the Isipathana College Media Unit.',
+  ].filter(Boolean).join('\n');
+
   return `https://wa.me/${phone.slice(1)}?text=${encodeURIComponent(text)}`;
 }
 

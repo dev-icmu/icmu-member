@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { sanitizeMemberInput, coerceE164, trimAndClean, stripHtml, toTitleCase } from '../../../utils/sanitize';
+import { colomboToday } from '@/entities/members/lib/applicationForm';
 
 export const useRegistrationForm = () => {
   const [activeStep, setActiveStep] = useState(1);
@@ -9,7 +10,7 @@ export const useRegistrationForm = () => {
     full_name: '',
     name_with_initials: '',
     date_of_birth: '2008-04-15',
-    joined_date: new Date().toISOString().split('T')[0],
+    joined_date: colomboToday(),
     city: 'Colombo 05',
     whatsapp_number: '',
     email_address: '',
@@ -100,7 +101,7 @@ export const useRegistrationForm = () => {
   const resetForm = () => {
     setFormData({
       index_number: '', full_name: '', name_with_initials: '', date_of_birth: '2008-04-15',
-      joined_date: new Date().toISOString().split('T')[0], city: 'Colombo 05', whatsapp_number: '', email_address: '',
+      joined_date: colomboToday(), city: 'Colombo 05', whatsapp_number: '', email_address: '',
       guardian_name: '', guardian_occupation: '', guardian_contact: '', skills: [],
     });
     setActiveStep(1);

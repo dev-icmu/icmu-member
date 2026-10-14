@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { titleCase, nameWithInitials, displayDate } from '@/entities/members/lib/memberDisplay';
 import { memberCsv } from '@/entities/members/lib/memberExport';
 import { useToast } from '@/context/ToastContext';
+import { getActiveFee, useAppConfig, DEFAULT_ACADEMIC_YEAR } from '@/entities/members/hooks/useFees';
 
 const DesktopTable = lazy(() => import('@/components/motion/table').then(module => ({ default:module.Table })));
 
@@ -17,6 +18,9 @@ export function MemberDataTable({ rows, applications, selecting, onStopSelection
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width:767px)').matches);
   const [drawerMember, setDrawerMember] = useState(null);
   const { addToast } = useToast();
+  const configQuery = useAppConfig();
+  const activeYear = configQuery.data?.ACADEMIC_YEAR || DEFAULT_ACADEMIC_YEAR;
+  const defaultFeeAmount = configQuery.data?.MEMBERSHIP_FEE_LKR || 500;
   useEffect(() => {
     const media = window.matchMedia('(max-width:767px)');
     const update = () => setMobile(media.matches);
@@ -43,8 +47,11 @@ export function MemberDataTable({ rows, applications, selecting, onStopSelection
     try { await navigator.clipboard.writeText(member.member_id || member.form_number); addToast({type:'success',message:'Copied to clipboard.'}); }
     catch { addToast({type:'error',message:'Copy was unavailable. Open the profile to select and copy the ID.'}); }
   }
-  const fee = m => m.fee_paid_at ? `LKR ${Number(m.fee_amount).toLocaleString('en-LK')} received` : m.application_source === 'paper' ? 'Awaiting payment' : 'Not recorded';
-  const form = m => m.form_number ? `Form ${m.form_number}` : m.application_source === 'online' ? 'Online application' : 'No paper form recorded';
+  const fee = m => {
+    const activeFee = getActiveFee(m, activeYear);
+    return activeFee ? `LKR ${Number(activeFee.fee_amount || defaultFeeAmount).toLocaleString('en-LK')} received` : m.form_number ? 'Awaiting payment' : 'Not recorded';
+  };
+  const form = m => m.form_number ? `Form ${m.form_number}` : 'Online application';
   const submitted = m => m.created_at ? new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Colombo' }).format(new Date(m.created_at)) : 'Not recorded';
   const joined = m => (m.joined_date || m.created_at) ? `Joined ${displayDate(m.joined_date || m.created_at)}` : 'Joined date not recorded';
   function stopSelecting() { onStopSelection(); setSelection([]); }

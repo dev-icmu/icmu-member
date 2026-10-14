@@ -82,14 +82,12 @@ test('LIKE wildcard input is literal and Unicode names remain searchable', () =>
 
 const paper = { ...example, form_number: '0001', city: 'Colombo' };
 
-test('new paper entries preserve printed form numbers and default only the new fee amount', () => {
+test('new paper entries preserve printed form numbers', () => {
   const result = buildMemberPayload(paper, { admin: true });
   assert.equal(result.form_number, '0001');
-  assert.equal(result.application_source, 'paper');
-  assert.equal(result.fee_amount, 500);
+  assert.equal(Object.hasOwn(result, 'fee_amount'), false);
   assert.equal(Object.hasOwn(result, 'fee_received'), false);
   assert.deepEqual(buildMemberPayload({ city: 'Colombo' }, { admin: true, partial: true }), { city: 'colombo' });
-  assert.throws(() => buildMemberPayload({ fee_amount: null }, { admin: true, partial: true }), /fixed/);
 });
 
 test('paper requirements and fee values are validated before saving', () => {
@@ -99,7 +97,7 @@ test('paper requirements and fee values are validated before saving', () => {
     assert.throws(() => buildMemberPayload({ ...paper, fee_amount }, { admin: true }), /fee amount/);
   }
   assert.throws(() => buildMemberPayload({ ...paper, fee_received: 'true' }, { admin: true }), /received/);
-  assert.equal(buildMemberPayload({ ...paper, fee_amount: 500, fee_received: false }, { admin: true }).fee_amount, 500);
+  assert.equal(buildMemberPayload({ ...paper, fee_received: false }, { admin: true }).fee_received, false);
 });
 
 test('public applicants cannot submit paper, fee or audit fields', () => {
@@ -143,6 +141,5 @@ test('one name accepts long full names or initials without class, address or a s
 
 test('locked fee prevents modifying payment status or fee amount on approved members', () => {
   assert.throws(() => buildMemberPayload({ fee_received: false }, { admin: true, partial: true, lockedFee: true }), /Payment and fee details cannot be modified/);
-  assert.throws(() => buildMemberPayload({ fee_amount: 500 }, { admin: true, partial: true, lockedFee: true }), /Payment and fee details cannot be modified/);
   assert.deepEqual(buildMemberPayload({ city: 'Colombo' }, { admin: true, partial: true, lockedFee: true }), { city: 'colombo' });
 });

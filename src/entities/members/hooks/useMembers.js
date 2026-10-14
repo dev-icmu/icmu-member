@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase.js';
 import { buildMemberPayload, buildMemberSearchFilter, normalizeMemberListOptions } from '../lib/memberPayload.js';
 
-const LIST_COLUMNS = 'id,member_id,form_number,index_number,full_name,name_with_initials,date_of_birth,joined_date,batch_year,city,school_class,address,other_skills,application_source,fee_amount,fee_paid_at,processed_by,processed_by_name,processed_at,approved_by,approved_by_name,approved_at,whatsapp_number,email_address,interests,membership_status,is_active,deactivated_at,created_at,updated_at,member_team_assignment(team_id)';
+const LIST_COLUMNS = 'id,member_id,form_number,index_number,full_name,name_with_initials,date_of_birth,joined_date,batch_year,city,other_skills,processed_by,processed_by_name,processed_at,whatsapp_number,email_address,interests,membership_status,is_active,deactivated_at,created_at,updated_at,member_team_assignment(team_id),membership_fee(id,fees)';
 
 export const useMembers = (options = {}) => {
   const filters = normalizeMemberListOptions(options);
@@ -61,7 +61,7 @@ export const useMember = (id) => useQuery({
   enabled: Boolean(id),
   queryFn: async ({ signal }) => {
     const { data, error } = await supabase.from('member')
-      .select('*, guardian(*), member_team_assignment(*, production_team(*))')
+      .select('*, guardian(*), member_team_assignment(*, production_team(*)), membership_fee(*)')
       .eq('id', id)
       .single()
       .abortSignal(signal);
@@ -84,7 +84,21 @@ export const useAdminAnalytics = () => useQuery({
 });
 
 async function callMemberRpc(name, args) {
-  const { data, error } = await supabase.rpc(name, args);
+  let { data, error } = await supabase.rpc(name, args);
+  if (error && (error.code === '42501' || error.message?.includes('Admin access required') || error.message?.includes('JWT') || error.message?.includes('expired'))) {
+    try {
+      if (typeof supabase.auth?.refreshSession === 'function') {
+        const { error: refreshErr } = await supabase.auth.refreshSession();
+        if (!refreshErr) {
+          const retry = await supabase.rpc(name, args);
+          data = retry.data;
+          error = retry.error;
+        }
+      }
+    } catch {
+      // Fall through to throw original error
+    }
+  }
   if (error) throw error;
   return data;
 }

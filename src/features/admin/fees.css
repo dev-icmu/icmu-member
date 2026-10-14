@@ -1,0 +1,485 @@
+/* ==========================================================================
+   Fees Tab Styles — Clean, Minimal, Applications-Inspired Design System
+   Mobile-Native & UI Guideline compliant
+   ========================================================================== */
+
+/* Page container matches standard directory */
+.adm-fees-page {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fee status badges */
+.adm-fee-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.adm-fee-badge.is-paid {
+  background: rgba(92, 227, 142, 0.12);
+  color: #79e39d;
+  border: 1px solid rgba(92, 227, 142, 0.28);
+}
+
+.adm-fee-badge.is-unpaid {
+  background: rgba(234, 179, 8, 0.1);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.adm-fee-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* beUI Animated Paid/Unpaid Tabs container */
+.adm-fees-status-tabs {
+  margin-bottom: 16px;
+  display: inline-flex;
+}
+
+/* Table Avatar Box */
+.adm-avatar-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #102217;
+  border: 1px solid #1d3b27;
+  color: #7be4a3;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Action: Receipt Button */
+.adm-btn-action-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  min-height: 30px;
+  border-radius: 7px;
+  background: #0a160f;
+  border: 1px solid #1e3626;
+  color: #a2beaa;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 140ms ease;
+}
+
+.adm-btn-action-receipt:hover {
+  background: #122419;
+  border-color: #335d40;
+  color: #e4faec;
+}
+
+.adm-btn-action-receipt:active {
+  transform: scale(0.97);
+}
+
+/* Action: Record Button */
+.adm-btn-action-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  min-height: 30px;
+  border-radius: 7px;
+  background: #102619;
+  border: 1px solid #285437;
+  color: #7ee7a4;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 140ms ease;
+}
+
+.adm-btn-action-record:hover {
+  background: #173824;
+  border-color: #3c8254;
+  color: #ffffff;
+}
+
+.adm-btn-action-record:active {
+  transform: scale(0.97);
+}
+
+/* Table detail subtext */
+.adm-fee-detail-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adm-fee-detail-text strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #d6e8db;
+}
+
+.adm-fee-detail-text small {
+  font-size: 9.5px;
+  color: #7b9684;
+}
+
+/* Member picker inside Record Fee modal (when no target member is pre-selected) */
+.adm-fee-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adm-fee-picker-search {
+  position: relative;
+  width: 100%;
+}
+
+.adm-fee-picker-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px 8px 36px;
+  background: #09130c;
+  border: 1px solid #233e2c;
+  border-radius: 10px;
+  color: #e4f9ec;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 140ms ease;
+}
+
+.adm-fee-picker-input:focus {
+  border-color: #5ce38e;
+}
+
+.adm-fee-picker-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6d8e78;
+  pointer-events: none;
+}
+
+.adm-fee-picker-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #233e2c;
+  border-radius: 10px;
+  background: #0a150e;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adm-fee-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8eadc;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.adm-fee-picker-item:hover {
+  background: #183321;
+}
+
+.adm-fee-picker-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #112619;
+  border: 1px solid #2d5539;
+  border-radius: 12px;
+}
+
+.adm-fee-picker-selected-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   Payment Stepper Navigation & Form
+   ========================================================================== */
+.adm-stepper-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin-bottom: 22px;
+  padding: 0 10px;
+}
+
+.adm-stepper-track {
+  position: absolute;
+  top: 15px;
+  left: 36px;
+  right: 36px;
+  height: 2px;
+  background: #193322;
+  z-index: 1;
+}
+
+.adm-stepper-track-fill {
+  height: 100%;
+  background: #5ce38e;
+  transition: width 240ms ease;
+}
+
+.adm-stepper-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.adm-stepper-step:disabled {
+  cursor: default;
+}
+
+.adm-stepper-bubble {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: #0d1711;
+  border: 2px solid #233e2c;
+  color: #7b9684;
+  transition: all 180ms ease;
+}
+
+.adm-stepper-step[data-state="active"] .adm-stepper-bubble {
+  background: #1b4d2f;
+  border-color: #5ce38e;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(92, 227, 142, 0.35);
+}
+
+.adm-stepper-step[data-state="completed"] .adm-stepper-bubble {
+  background: #5ce38e;
+  border-color: #5ce38e;
+  color: #061b0c;
+}
+
+.adm-stepper-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #7d9685;
+}
+
+.adm-stepper-step[data-state="active"] .adm-stepper-label {
+  color: #e4faec;
+  font-weight: 600;
+}
+
+.adm-stepper-step[data-state="completed"] .adm-stepper-label {
+  color: #79e39d;
+}
+
+/* Student preview card inside Stepper */
+.adm-student-preview-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #0d1b12;
+  border: 1px solid #294d34;
+  border-radius: 14px;
+  margin-top: 12px;
+}
+
+.adm-student-preview-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adm-student-preview-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #183823 0%, #0d1e13 100%);
+  border: 1px solid #2f5a3b;
+  color: #6ee7a2;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Amount Preset Buttons */
+.adm-amount-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.adm-preset-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #122318;
+  border: 1px solid #284732;
+  color: #a7cca5;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.adm-preset-btn:hover {
+  background: #1a3825;
+  border-color: #49c977;
+  color: #e4faec;
+}
+
+.adm-preset-btn[data-active="true"] {
+  background: #1e4d2f;
+  border-color: #5ce38e;
+  color: #ffffff;
+}
+
+/* WhatsApp Receipt Banner in Done state and Receipt Modal */
+.adm-whatsapp-share-card {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(37, 211, 102, 0.08);
+  border: 1px solid rgba(37, 211, 102, 0.22);
+}
+
+.adm-whatsapp-share-card p {
+  font-size: 12px;
+  color: #c9eed5;
+  margin-bottom: 10px;
+}
+
+.adm-whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  border-radius: 12px;
+  background: #25d366;
+  color: #04210d !important;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 140ms ease, transform 100ms ease;
+}
+
+.adm-whatsapp-btn:hover {
+  background: #20ba5a;
+  color: #021408 !important;
+}
+
+.adm-whatsapp-btn:active {
+  transform: scale(0.98);
+}
+
+/* Mobile overrides */
+@media (max-width: 767px) {
+  /* Safe-area and floating navigation island clearance */
+  .adm-fees-page {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Two-column grid for filters with Sort spanning the bottom row */
+  .adm-fees-page .adm-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .adm-fees-page .adm-filters select {
+    width: 100%;
+    font-size: 16px; /* /mobile-native: prevent iOS auto-zoom */
+    min-height: 44px; /* touch target */
+    text-overflow: ellipsis;
+  }
+
+  .adm-fees-page .adm-filters select:last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Summary bar stacks vertically so numbers don't crowd */
+  .adm-fees-page .adm-table-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 16px 14px;
+  }
+
+  .adm-fees-collected-badge {
+    align-self: flex-start;
+  }
+
+  .adm-fee-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  .adm-fee-picker-input {
+    font-size: 16px; /* Crucial for /mobile-native: prevent iOS auto-zoom */
+    min-height: 46px;
+  }
+
+  .adm-fee-picker-item {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  /* Modal forms: enforce 16px to prevent iOS Safari auto-zoom on focus */
+  .adm-generic-dialog-layer :is(input, select, textarea) {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+}
+

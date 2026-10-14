@@ -16,12 +16,36 @@ const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const skills=['Photography','Announcing','Graphic Design'].map((name,i)=>({id:uuid(500+i),skill_name:name,skill_desc:'A media skill',is_active:true,is_protected:i===0}));
 const teams=[{id:uuid(800),team_name:'Production crew',is_active:true,is_protected:false,required_skills:[skills[0].id]}];
 const members=Array.from({length:47},(_,i)=>({id:uuid(i+1),full_name:`Sample Member ${String(i+1).padStart(2,'0')}`,name_with_initials:`S. Member ${i+1}`,member_id:i<30?`12M${String(i+1).padStart(3,'0')}`:null,index_number:`20${100+i}`,batch_year:2012,date_of_birth:'2012-04-10',joined_date:'2026-09-10',created_at:`2026-09-${String(i%28+1).padStart(2,'0')}T06:00:00Z`,updated_at:'2026-10-14T06:00:00Z',membership_status:i<30?'accepted':i<43?'pending':'rejected',is_active:i!==4,city:'Colombo',whatsapp_number:'+94770000000',email_address:`sample${i+1}@example.invalid`,interests:[skills[i%3].id],guardian:{id:uuid(100+i),guardian_name:'Sample Guardian',contact_number:'+94771111111',occupation:'Sample occupation'},member_team_assignment:[]}));
-members.forEach((member,index)=>Object.assign(member,{form_number:String(index+1).padStart(4,'0'),application_source:'paper',school_class:'9 A',address:'Example address, Colombo',other_skills:'',fee_amount:500,fee_paid_at:index===31?null:'2026-10-14T06:00:00Z',processed_by_name:'Sample Admin',approved_by_name:member.member_id?'Sample Admin':null}));
+members.forEach((member,index)=>Object.assign(member,{form_number:String(index+1).padStart(4,'0'),other_skills:'',processed_by_name:'Sample Admin'}));
 const response=(data,count,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json',...(count!==undefined?{'content-range':`0-${Math.max(0,count-1)}/${count}`}:{})}});
 members.forEach((member,index)=>{
   member.batch_year=2010+index%3;
   member.date_of_birth=`${member.batch_year}-04-10`;
   if(member.member_id)member.member_id=`${String(member.batch_year).slice(-2)}M${String(index+1).padStart(3,'0')}`;
+});
+const configs=[
+  { key: 'ACADEMIC_YEAR', value: '2026/2027', description: 'Active academic cycle for membership fee collection (March to March)' },
+  { key: 'ACADEMIC_BATCH_YEAR', value: '2008', description: 'Cutoff batch year: only batches above this year count towards active fees' },
+  { key: 'MEMBERSHIP_FEE_LKR', value: '500', description: 'Standard yearly membership fee in LKR' },
+];
+const membershipFees=members.filter((_,idx)=>idx!==31).map((m,idx)=>({
+  id: uuid(9000+idx),
+  member_id: m.id,
+  fees: [
+    {
+      academic_year: '2026/2027',
+      fee_amount: 500,
+      paid_date: '2026-10-14T06:00:00Z',
+      payment_method: 'cash',
+      receipt_number: `RCP-2026-${String(idx+1).padStart(3,'0')}`,
+      recorded_by_name: 'Sample Admin',
+      notes: 'Fixture initial payment'
+    }
+  ]
+}));
+members.forEach((member)=>{
+  const mf = membershipFees.find(f => f.member_id === member.id);
+  member.membership_fee = mf ? [mf] : [];
 });
 function analytics(){return {counts:{total:members.length,accepted:members.filter(m=>m.membership_status==='accepted').length,pending:members.filter(m=>m.membership_status==='pending').length,rejected:members.filter(m=>m.membership_status==='rejected').length,active:members.filter(m=>m.membership_status==='accepted'&&m.is_active).length,inactive:members.filter(m=>m.membership_status==='accepted'&&!m.is_active).length,teams:teams.filter(t=>t.is_active).length,skills:skills.filter(s=>s.is_active).length},monthly:['May','Jun','Jul','Aug','Sep','Oct'].map((label,i)=>({label,month:`2026-${i+5}`,applications:[1,4,2,8,19,13][i],accepted:0})),batches:[{batch_year:2012,count:30}],interests:skills.map(s=>({id:s.id,name:s.skill_name,count:members.filter(m=>m.interests.includes(s.id)).length})),teams:teams.map(t=>({id:t.id,name:t.team_name,count:members.filter(m=>m.member_team_assignment.some(a=>a.team_id===t.id)).length})),recent:members.slice(-5)}};
 const originalFetch=window.fetch.bind(window);
@@ -31,7 +55,9 @@ window.fetch=async (input,init={})=>{
   if(!url.pathname.startsWith('/rest/v1/'))return response({message:'External requests are disabled in this local fixture'},undefined,403);
   const path=url.pathname.split('/').at(-1);const body=init.body?JSON.parse(init.body):{};const method=init.method||'GET';
   if(path==='admin_membership_revenue'){
-    const paid=members.filter(m=>m.fee_paid_at);return response({total:paid.reduce((sum,m)=>sum+m.fee_amount,0),payments:paid.length,missing_amounts:0,approved:paid.filter(m=>m.membership_status==='accepted').reduce((sum,m)=>sum+m.fee_amount,0),pending:paid.filter(m=>m.membership_status==='pending').reduce((sum,m)=>sum+m.fee_amount,0),rejected:paid.filter(m=>m.membership_status==='rejected').reduce((sum,m)=>sum+m.fee_amount,0)});
+    const paid=members.filter(m=>((m.membership_fee || []).length > 0) && Number(m.batch_year) > 2008);
+    const pendingNon2008=members.filter(m=>m.membership_status==='pending' && Number(m.batch_year) > 2008).length;
+    return response({total:paid.length*500,payments:paid.length,missing_amounts:0,approved:paid.filter(m=>m.membership_status==='accepted').length*500,pending:paid.filter(m=>m.membership_status==='pending').length*500,rejected:paid.filter(m=>m.membership_status==='rejected').length*500,pending_count:pendingNon2008});
   }
   if(path==='admin_member_analytics')return response(analytics());
   if(path==='admin_application_activity'){
@@ -46,7 +72,7 @@ window.fetch=async (input,init={})=>{
   if(path==='member'){
     let rows=[...members];for(const key of ['membership_status','is_active','id','batch_year']){if(url.searchParams.has(key)){const value=url.searchParams.get(key).slice(3);rows=rows.filter(m=>String(m[key])===value);}}
     if(url.searchParams.get('or')){const q=url.searchParams.get('or').match(/ilike\."%(.+?)%"/)?.[1]?.toLowerCase();if(q)rows=rows.filter(m=>[m.full_name,m.member_id,m.form_number,m.email_address,m.index_number].some(x=>x?.toLowerCase().includes(q)));}
-    const count=rows.length;const from=Number(url.searchParams.get('offset')||0);const limit=Number(url.searchParams.get('limit')||20);rows=rows.slice(from,from+limit);
+    const count=rows.length;const from=Number(url.searchParams.get('offset')||0);const limit=url.searchParams.has('limit')?Number(url.searchParams.get('limit')):rows.length;rows=rows.slice(from,from+limit);
     const accept=new Headers(init.headers).get('accept');return response(accept?.includes('vnd.pgrst.object')?rows[0]:rows,count);
   }
   if(path==='skill'||path==='production_team'){
@@ -79,12 +105,75 @@ window.fetch=async (input,init={})=>{
         if(!skill){skill={id:crypto.randomUUID(),skill_name:name,is_active:true,is_protected:false};skills.push(skill);}
         member.interests=[...new Set([...(member.interests || []),skill.id])];
       }
-      if('fee_received' in body.p_payload)member.fee_paid_at=body.p_payload.fee_received?new Date().toISOString():null;return response({id:member.id});
+      if('fee_received' in body.p_payload){
+        let mf = membershipFees.find(f => f.member_id === member.id);
+        if(body.p_payload.fee_received){
+          const feeItem = { academic_year: '2026/2027', fee_amount: 500, paid_date: new Date().toISOString(), payment_method: 'cash' };
+          if(!mf){
+            mf = {
+              id: crypto.randomUUID(),
+              member_id: member.id,
+              fees: [feeItem],
+              notes: []
+            };
+            membershipFees.push(mf);
+          } else if(!mf.fees.some(f => f.academic_year === '2026/2027')) {
+            mf.fees.push(feeItem);
+          }
+          member.membership_fee = [mf];
+        } else {
+          if (mf) mf.fees = mf.fees.filter(f => f.academic_year !== '2026/2027');
+          member.membership_fee = mf?.fees?.length ? [mf] : [];
+        }
+      }
+      return response({id:member.id});
     }
-    if(['approve_member','approve_member_with_notification'].includes(path)){if(member.application_source==='paper'&&!member.fee_paid_at)return response({message:'Record the received fee before approval'},undefined,400);member.membership_status='accepted';member.member_id='12M048';member.approved_by_name='Sample Admin';return response(member.member_id);}
+    if(['approve_member','approve_member_with_notification'].includes(path)){
+      const hasFee = (member.membership_fee?.[0]?.fees || []).some(f => f.academic_year === '2026/2027');
+      if(member.form_number && !hasFee) return response({message:'Record the received fee before approval'},undefined,400);
+      member.membership_status='accepted';
+      member.member_id='12M048';
+      return response(member.member_id);
+    }
     if(path==='admin_review_member')member.membership_status=body.p_status;
     if(path==='admin_set_member_active')member.is_active=body.p_active;
     return response({id:member.id});
+  }
+  if(path==='config')return response(configs);
+  if(path==='membership_fee'){
+    let rows=membershipFees.map(f=>({...f,member:members.find(m=>m.id===f.member_id)}));
+    if(url.searchParams.has('member_id')){const value=url.searchParams.get('member_id').slice(3);rows=rows.filter(f=>f.member_id===value);}
+    return response(rows,rows.length);
+  }
+  if(path==='admin_get_member_fee_history'){
+    const mf=membershipFees.find(f=>f.member_id===body.p_member_id);
+    return response(mf ? mf.fees : []);
+  }
+  if(path==='admin_record_membership_fee'){
+    let mf=membershipFees.find(f=>f.member_id===body.p_member_id);
+    const feeItem = {
+      academic_year: body.p_academic_year,
+      fee_amount: body.p_fee_amount || 500,
+      paid_date: body.p_paid_date || new Date().toISOString().slice(0,10),
+      receipt_number: body.p_receipt_number || null,
+      recorded_by_name: 'Sample Admin',
+      notes: body.p_notes || null,
+    };
+    if(mf){
+      mf.fees = [...mf.fees.filter(f => f.academic_year !== body.p_academic_year), feeItem];
+      if(body.p_notes) mf.notes.push({ text: body.p_notes, date: feeItem.paid_date });
+    } else {
+      mf = {
+        id: crypto.randomUUID(),
+        member_id: body.p_member_id,
+        fees: [feeItem],
+        notes: body.p_notes ? [{ text: body.p_notes, date: feeItem.paid_date }] : [],
+      };
+      membershipFees.push(mf);
+    }
+    const m=members.find(x=>x.id===body.p_member_id);
+    if(m) m.membership_fee = [mf];
+    return response({id:mf.id});
   }
   return response({message:'Unimplemented fixture request'},undefined,400);
 };

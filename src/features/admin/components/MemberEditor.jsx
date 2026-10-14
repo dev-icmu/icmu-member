@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Plus, X, ReceiptText } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, X, ReceiptText, CheckCircle2, Circle } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { StatefulButton } from '@/components/motion/button/stateful';
 import { Input } from '@/components/motion/input';
@@ -9,6 +9,7 @@ import { Combobox, ComboboxTrigger, ComboboxInput, ComboboxContent, ComboboxList
 import { SRI_LANKAN_CITIES } from '@/utils/sri-lankan-cities';
 import { useAdminCreateMember, useMember, useUpdateMember } from '@/entities/members/hooks/useMembers';
 import { useSkills } from '@/entities/skills/hooks/useSkills';
+import { useAppConfig, getActiveFee, DEFAULT_ACADEMIC_YEAR, DEFAULT_FEE_LKR } from '@/entities/members/hooks/useFees';
 import { MEMBERSHIP_FEE_LKR, normalizeApplicationText } from '@/entities/members/lib/memberPayload';
 import { applicationSteps, stepFields, colomboToday, dateDigits, dateFromDigits, localPhone, fieldValue, applicationFieldError } from '@/entities/members/lib/applicationForm';
 import { displayDate } from '@/entities/members/lib/memberDisplay';
@@ -52,16 +53,19 @@ function MemberForm({ member, onClose }) {
   const [error, setError] = useState('');
   const [skillDraft, setSkillDraft] = useState('');
   const [skillError, setSkillError] = useState('');
-  const isPaper = !member || member.application_source === 'paper';
+  const configQuery = useAppConfig();
+  const activeYear = configQuery.data?.ACADEMIC_YEAR || DEFAULT_ACADEMIC_YEAR;
+  const isPaper = !member || Boolean(member.form_number);
   const isApproved = member?.membership_status === 'accepted';
-  const isPaidAndApproved = isApproved && Boolean(member?.fee_paid_at);
+  const existingActiveFee = getActiveFee(member, activeYear);
+  const isPaidAndApproved = isApproved && Boolean(existingActiveFee);
   const [form, setForm] = useState(() => ({
     full_name: member?.full_name || '',
     index_number: member?.index_number || '', date_of_birth: member?.date_of_birth || '',
     joined_date: member?.joined_date || colomboToday(), city: member?.city || '',
     whatsapp_number: localPhone(member?.whatsapp_number), email_address: member?.email_address || '',
     form_number: member?.form_number || '',
-    fee_received: Boolean(member?.fee_paid_at), interests: member?.interests || [], custom_skills: [],
+    fee_received: Boolean(existingActiveFee), interests: member?.interests || [], custom_skills: [],
     guardian: { guardian_name: member?.guardian?.guardian_name || '', contact_number: localPhone(member?.guardian?.contact_number), occupation: member?.guardian?.occupation || '' },
   }));
   const busy = create.isPending || update.isPending;
@@ -130,13 +134,13 @@ function MemberForm({ member, onClose }) {
     locked.current = true; setError('');
     try {
       const payload = { ...form };
+      payload.academic_year = activeYear;
+      payload.fee_amount = fee;
       if (isPaidAndApproved) {
         delete payload.fee_received;
-        delete payload.fee_amount;
-      } else if (member && form.fee_received === Boolean(member.fee_paid_at)) {
+      } else if (member && form.fee_received === Boolean(existingActiveFee)) {
         delete payload.fee_received;
       }
-      if (!member) payload.application_source = 'paper';
       if (member) await update.mutateAsync({ id: member.id, payload }); else await create.mutateAsync(payload);
       addToast({ type: 'success', message: member ? 'Member details saved.' : 'Application submitted. Review and approve it to issue a member ID.' });
       onClose();
@@ -145,7 +149,7 @@ function MemberForm({ member, onClose }) {
 
   const availableSkills = (skills.data || []).filter(skill => skill.is_active || form.interests.includes(skill.id));
   const selectedSkills = [...form.interests.map(id => skills.data?.find(skill => skill.id === id)?.skill_name || 'Saved skill'), ...form.custom_skills];
-  const fee = member?.fee_amount ?? MEMBERSHIP_FEE_LKR;
+  const fee = Number(existingActiveFee?.fee_amount || configQuery.data?.MEMBERSHIP_FEE_LKR || DEFAULT_FEE_LKR);
   return <ApplicationDialog step={step} busy={busy} onClose={onClose} title={member ? 'Edit member' : 'Submit an application'}>{closeApplication => <>
     <nav aria-label="Application steps"><ol className="application-stepper">
       {applicationSteps.map((item, index) => <li key={item.title} data-current={step === index} data-complete={step > index}>
@@ -202,9 +206,40 @@ function MemberForm({ member, onClose }) {
             <dl>{[['Student', form.full_name], ['Form / admission', `${form.form_number || 'Not recorded'} / ${form.index_number || 'Not recorded'}`], ['Date of birth', form.date_of_birth], ['City / town', form.city], ['WhatsApp', form.whatsapp_number], ['Email', form.email_address], ['Guardian', form.guardian.guardian_name], ['Guardian contact', form.guardian.contact_number]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not recorded'}</dd></div>)}</dl>
             <div className="application-review-skills"><span>Skills</span><div className="application-skill-pills">{selectedSkills.length ? selectedSkills.map((name, index) => <span key={`${name}-${index}`}>{name}</span>) : <small>No skills selected</small>}</div></div>
             {dateField('joined_date', 'Date on form / joined date *')}
-            <div className="application-fee"><ReceiptText size={24} /><div><span>Membership fee</span><strong>LKR {fee.toLocaleString('en-LK')}</strong><small>{isPaidAndApproved ? `Payment recorded on ${displayDate(member.fee_paid_at)}. Irreversible after approval.` : member?.fee_amount != null && fee !== MEMBERSHIP_FEE_LKR ? 'Previously recorded fee. This amount is kept for the receipt.' : 'Fixed membership fee'}</small></div></div>
-            <Checkbox className="application-payment" checked={form.fee_received} onCheckedChange={value => { if (!isPaidAndApproved) set('fee_received', value); }} disabled={busy || isPaidAndApproved} aria-label="Membership fee received" label={<span><strong>Membership fee received</strong><small>{isPaidAndApproved ? 'Payment confirmed and recorded. Irreversible once approved.' : 'Tick after checking the payment. An unpaid application can stay pending.'}</small></span>} />
-            {isPaidAndApproved && <div className="adm-irreversible-banner" role="status"><Check size={16} /><span>Approved & Paid: Fee payment and membership approval are permanent and cannot be reversed.</span></div>}
+            <button
+              type="button"
+              className={`application-fee-checkout ${form.fee_received ? 'is-paid' : ''}`}
+              onClick={() => {
+                if (!isPaidAndApproved && !busy) {
+                  set('fee_received', !form.fee_received);
+                }
+              }}
+              disabled={busy || isPaidAndApproved}
+              aria-pressed={form.fee_received}
+              aria-label={`Membership fee received for academic year ${activeYear}`}
+            >
+              <div className="application-fee-checkout-check" aria-hidden="true">
+                {form.fee_received ? (
+                  <CheckCircle2 size={24} className="text-emerald-400" />
+                ) : (
+                  <Circle size={24} className="text-gray-500" />
+                )}
+              </div>
+              <div className="application-fee-checkout-info">
+                <div className="application-fee-checkout-title">
+                  <strong>Paid for Academic Year {activeYear}</strong>
+                  <span className="application-fee-checkout-amount">LKR {fee.toLocaleString('en-LK')}</span>
+                </div>
+                <small>
+                  {isPaidAndApproved
+                    ? `Payment confirmed on ${displayDate(existingActiveFee?.paid_date)}. Permanent after approval.`
+                    : form.fee_received
+                    ? `Fee paid for ${activeYear}. Will be recorded in the fee table upon saving.`
+                    : `Unpaid · Tap to mark as paid for ${activeYear}`}
+                </small>
+              </div>
+            </button>
+            {isPaidAndApproved && <div className="adm-irreversible-banner" role="status"><Check size={16} /><span>Approved & Paid: Fee payment for {activeYear} is recorded and cannot be reversed.</span></div>}
             <p className="application-note">{member ? 'Your changes will update this member’s record.' : 'This application stays pending until an admin approves it. The member ID is created after approval.'}</p>
           </div>}
         </fieldset>

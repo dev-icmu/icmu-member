@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildApprovalWhatsappLink } from './whatsappLink.js';
+import { buildApprovalWhatsappLink, buildFeePaymentWhatsappLink } from './whatsappLink.js';
 
 const member = Object.freeze({
   membership_status: 'accepted', is_active: true, member_id: '12M001',
@@ -73,3 +73,30 @@ test('joined dates must be real date-only calendar values and retain their Colom
     assert.equal(buildApprovalWhatsappLink({ ...member, joined_date: date }), null, String(date));
   }
 });
+
+test('fee payment drafts generate valid wa.me URLs with receipt details and recipient phone', () => {
+  const link = buildFeePaymentWhatsappLink({
+    member: { full_name: 'k d perera', whatsapp_number: '+94771234567', member_id: '12M002', index_number: '12345' },
+    academicYear: '2026/2027',
+    amount: 1000,
+    paymentMethod: 'cash',
+    paidDate: '2026-10-15',
+  });
+  const url = new URL(link);
+  assert.equal(url.origin, 'https://wa.me');
+  assert.equal(url.pathname, '/94771234567');
+  const text = url.searchParams.get('text');
+  assert.ok(text.includes('Hello *K. D. PERERA*,'));
+  assert.ok(text.includes('LKR 1,000.00'));
+  assert.ok(text.includes('*Academic Year:* 2026/2027'));
+  assert.ok(text.includes('*Member ID:* 12M002'));
+  assert.ok(text.includes('*Admission No:* 12345'));
+  assert.ok(text.includes('*Payment Method:* Cash'));
+});
+
+test('fee payment drafts require valid phone and academic year', () => {
+  assert.equal(buildFeePaymentWhatsappLink({ member: null, academicYear: '2026/2027', amount: 500 }), null);
+  assert.equal(buildFeePaymentWhatsappLink({ member: { whatsapp_number: 'invalid' }, academicYear: '2026/2027', amount: 500 }), null);
+  assert.equal(buildFeePaymentWhatsappLink({ member: { whatsapp_number: '+94771234567' }, academicYear: '', amount: 500 }), null);
+});
+

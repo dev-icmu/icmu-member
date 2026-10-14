@@ -86,25 +86,20 @@ export function buildMemberPayload(input, { partial = false, requireGuardian = f
     throw new Error('Enter a valid email address.');
   }
   if (admin) {
-    if (lockedFee && (input.fee_received !== undefined || (input.fee_amount !== undefined && partial))) {
+    if (lockedFee && input.fee_received !== undefined) {
       throw new Error('Payment and fee details cannot be modified after member approval.');
-    }
-    if (!partial) payload.application_source = 'paper';
-    if (input.application_source !== undefined && input.application_source !== null) {
-      if (!['paper', 'online'].includes(input.application_source) || (!partial && input.application_source !== 'paper')) {
-        throw new Error('New admin entries must use a paper application.');
-      }
-      payload.application_source = input.application_source;
     }
     if (input.form_number !== undefined) {
       if (input.form_number !== null && typeof input.form_number !== 'string') throw new Error('Enter the printed form number as text.');
       payload.form_number = cleanText(input.form_number) || null;
       if (payload.form_number && !/^\d{4}$/.test(payload.form_number)) throw new Error('Enter the 4-digit form number.');
     }
-    if (input.fee_amount !== undefined) {
-      if (input.fee_amount !== MEMBERSHIP_FEE_LKR) throw new Error('The membership fee amount is fixed at LKR 500.');
-      payload.fee_amount = MEMBERSHIP_FEE_LKR;
-    } else if (!partial) payload.fee_amount = MEMBERSHIP_FEE_LKR;
+    if (input.academic_year !== undefined) {
+      payload.academic_year = cleanText(input.academic_year) || null;
+    }
+    if (input.fee_amount !== undefined && input.fee_amount !== MEMBERSHIP_FEE_LKR) {
+      throw new Error('The membership fee amount is fixed at LKR 500.');
+    }
     if (input.custom_skills !== undefined) {
       if (!Array.isArray(input.custom_skills) || input.custom_skills.length > 20
         || input.custom_skills.some(name => typeof name !== 'string' || !normalizeApplicationText(name) || normalizeApplicationText(name).length > 50)) {
@@ -116,13 +111,11 @@ export function buildMemberPayload(input, { partial = false, requireGuardian = f
       if (typeof input.fee_received !== 'boolean') throw new Error('Choose whether the fee has been received.');
       payload.fee_received = input.fee_received;
     }
-    if (payload.application_source === 'paper') {
-      for (const field of ['form_number', 'city']) {
-        if ((!partial || Object.hasOwn(payload, field)) && !payload[field]) throw new Error(`${field.replaceAll('_', ' ')} is required for a paper application.`);
-      }
+    for (const field of ['form_number', 'city']) {
+      if ((!partial || Object.hasOwn(payload, field)) && !payload[field]) throw new Error(`${field.replaceAll('_', ' ')} is required for a paper application.`);
     }
   }
-  for (const [field, maximum] of Object.entries({ full_name: 200, name_with_initials: 100, index_number: 20, city: 100, email_address: 254, form_number: 4, school_class: 30, address: 500 })) {
+  for (const [field, maximum] of Object.entries({ full_name: 200, name_with_initials: 100, index_number: 20, city: 100, email_address: 254, form_number: 4 })) {
     if (payload[field]?.length > maximum) throw new Error(`${field.replaceAll('_', ' ')} must be ${maximum} characters or fewer.`);
   }
   if (input.date_of_birth !== undefined) {

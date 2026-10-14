@@ -5,9 +5,9 @@ import { supabase } from '@/lib/supabase';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 import '../revenue.css';
 import { AdminLoading } from './AdminMotion';
-import { useAdminAnalytics } from '@/entities/members/hooks/useMembers';
 import { MEMBERSHIP_FEE_LKR } from '@/entities/members/lib/memberPayload';
-import { PaidMembersSheet } from './PaidMembersSheet';
+import { useAppConfig } from '@/entities/members/hooks/useFees';
+import { PaidMembersSheet, usePendingMembers } from './PaidMembersSheet';
 
 const ranges = [['all','All time'],['7d','7 days'],['30d','30 days'],['6m','6 months'],['1y','1 year']];
 const money = value => Number(value).toLocaleString('en-LK',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -17,7 +17,8 @@ export function MembershipRevenue() {
   const [period,setPeriod] = useState('30d');
   const [hidden,setHidden] = useState(()=>{try{const stored=localStorage.getItem(privacyKey);return stored===null?true:stored==='true';}catch{return true;}});
   const [showPaidSheet, setShowPaidSheet] = useState(false);
-  const analyticsQuery = useAdminAnalytics();
+  const [sheetTab, setSheetTab] = useState('paid');
+  const pendingQuery = usePendingMembers();
   const query = useQuery({
     queryKey:['membership-revenue',period], staleTime:30_000,
     queryFn:async({signal})=>{
@@ -32,10 +33,21 @@ export function MembershipRevenue() {
   }
   const amount = value => hidden ? <span className="adm-money-mask" aria-label="Amount hidden"><span aria-hidden="true">••••••</span></span> : money(value);
 
-  const pendingCount = Number(analyticsQuery.data?.counts?.pending || 0);
+  const configQuery = useAppConfig();
+  const feeAmount = configQuery.data?.MEMBERSHIP_FEE_LKR || MEMBERSHIP_FEE_LKR;
+
+  // Strictly exclude 2008 batch from pending count & est. pending income
+  const pendingCount = pendingQuery.data !== undefined
+    ? pendingQuery.data.length
+    : (query.data?.pending_count !== undefined ? Number(query.data.pending_count) : 0);
   const approvedIncome = Number(query.data?.approved || 0);
-  const estPendingIncome = pendingCount * MEMBERSHIP_FEE_LKR;
+  const estPendingIncome = pendingCount * feeAmount;
   const totalEstIncome = approvedIncome + estPendingIncome;
+
+  function openSheet(tabName) {
+    setSheetTab(tabName);
+    setShowPaidSheet(true);
+  }
 
   return <>
     <section className="adm-panel adm-revenue" aria-label="Membership revenue">
@@ -53,15 +65,22 @@ export function MembershipRevenue() {
             className="adm-revenue-clickable"
             role="button"
             tabIndex={0}
-            onClick={() => setShowPaidSheet(true)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPaidSheet(true); } }}
+            onClick={() => openSheet('paid')}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet('paid'); } }}
             aria-label="View approved members who paid"
           >
             <dt>Approved members (Received) <ArrowRight size={12} className="inline ml-1 opacity-60" /></dt>
             <dd>{amount(approvedIncome)}</dd>
           </div>
-          <div>
-            <dt>Est. pending ({pendingCount} applications)</dt>
+          <div
+            className="adm-revenue-clickable"
+            role="button"
+            tabIndex={0}
+            onClick={() => openSheet('pending')}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet('pending'); } }}
+            aria-label="View pending applications"
+          >
+            <dt>Est. pending ({pendingCount} applications) <ArrowRight size={12} className="inline ml-1 opacity-60" /></dt>
             <dd>{amount(estPendingIncome)}</dd>
           </div>
           <div>
@@ -72,8 +91,8 @@ export function MembershipRevenue() {
             className="adm-revenue-clickable"
             role="button"
             tabIndex={0}
-            onClick={() => setShowPaidSheet(true)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPaidSheet(true); } }}
+            onClick={() => openSheet('paid')}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet('paid'); } }}
             aria-label="View recorded payments"
           >
             <dt>Recorded payments <ArrowRight size={12} className="inline ml-1 opacity-60" /></dt>
@@ -83,7 +102,7 @@ export function MembershipRevenue() {
         <button
           type="button"
           className="adm-revenue-view-paid"
-          onClick={() => setShowPaidSheet(true)}
+          onClick={() => openSheet('paid')}
           aria-label="View who paid"
         >
           <span className="adm-revenue-view-paid-left">
@@ -103,6 +122,7 @@ export function MembershipRevenue() {
       <PaidMembersSheet
         open={showPaidSheet}
         onClose={() => setShowPaidSheet(false)}
+        initialTab={sheetTab}
       />
     )}
   </>;

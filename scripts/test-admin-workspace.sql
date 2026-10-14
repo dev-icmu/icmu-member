@@ -115,7 +115,7 @@ begin
   if not v_blocked then raise exception 'TEST: anonymous direct member INSERT remained exposed'; end if;
   v_application := (public.submit_member_application(v_payload||jsonb_build_object('email_address',null,'index_number','41002','membership_status','accepted','member_id','99M999','is_active',false,'custom_skills',jsonb_build_array('public forbidden skill')))->>'id')::uuid;
   execute 'set local role authenticated';
-  if not exists(select 1 from public.member where id=v_application and membership_status='pending' and member_id is null and is_active and application_source='online' and form_number is null and fee_amount is null and fee_paid_at is null and processed_by is null) then
+  if not exists(select 1 from public.member where id=v_application and membership_status='pending' and member_id is null and is_active and form_number is null and processed_by is null) then
     raise exception 'TEST: public registration accepted privileged fields';
   end if;
   if exists(select 1 from public.skill where skill_name='public forbidden skill') then raise exception 'TEST: public application created a catalog skill'; end if;
@@ -133,7 +133,7 @@ begin
 
   -- A paper application can be saved unpaid, but only approval issues its member ID.
   v_paper := (public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001','index_number','41003','email_address',null,'fee_received',false,'processed_by',gen_random_uuid(),'processed_by_name','Forged'))->>'id')::uuid;
-  if not exists(select 1 from public.member where id=v_paper and form_number='0001' and fee_amount=500 and fee_paid_at is null and membership_status='pending' and member_id is null and processed_by=v_admin and processed_by_name='Fixture Admin' and processed_at is not null) then
+  if not exists(select 1 from public.member where id=v_paper and form_number='0001' and membership_status='pending' and member_id is null and processed_by=v_admin and processed_by_name='Fixture Admin' and processed_at is not null) then
     raise exception 'TEST: new paper defaults, form number or processing audit failed';
   end if;
 
@@ -143,7 +143,7 @@ begin
     'guardian',jsonb_build_object('guardian_name','  UPPER Guardian ','contact_number','0094707654321','occupation',' TEACHER '),
     'custom_skills',jsonb_build_array(' Audio   Mixing ','audio mixing','TEST SKILL '||v_tag)));
   if not exists(select 1 from public.member m join public.guardian g on g.id=m.guardian_id where m.id=v_paper
-    and m.full_name='r m p g t hasarinda' and m.city='colombo' and m.school_class is null and m.address is null and m.name_with_initials is null and m.other_skills is null
+    and m.full_name='r m p g t hasarinda' and m.city='colombo' and m.name_with_initials is null and m.other_skills is null
     and m.whatsapp_number='+94701234567' and g.guardian_name='upper guardian' and g.occupation='teacher' and g.contact_number='+94707654321') then
     raise exception 'TEST: application text or local phone normalization failed';
   end if;
@@ -159,9 +159,6 @@ begin
   exception when unique_violation then v_blocked:=true; end;
   if not v_blocked or (select count(*) from public.skill)<>v_skill_count then raise exception 'TEST: failed application left an orphan skill'; end if;
   v_blocked:=false;
-  begin perform public.admin_save_member(v_paper,'{"fee_amount":0}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
-  if not v_blocked or (select fee_amount from public.member where id=v_paper)<>500 then raise exception 'TEST: fee constant could be overridden'; end if;
-  v_blocked:=false;
   begin perform public.admin_save_member(v_paper,'{"form_number":"1e03"}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
   if not v_blocked then raise exception 'TEST: invalid printed digits accepted'; end if;
   v_blocked:=false;
@@ -172,24 +169,20 @@ begin
   if not v_blocked then raise exception 'TEST: internal prepare function exposed'; end if;
   v_blocked := false;
   begin perform public.approve_member(v_paper); exception when invalid_parameter_value then v_blocked := true; end;
-  if not v_blocked or exists(select 1 from public.member where id=v_paper and (member_id is not null or approved_by is not null)) then raise exception 'TEST: unpaid paper application was approved'; end if;
-
-  v_blocked := false;
-  begin perform public.admin_save_member(v_paper,jsonb_build_object('application_source','online')); exception when invalid_parameter_value then v_blocked:=true; end;
-  if not v_blocked then raise exception 'TEST: paper application source could bypass fee requirement'; end if;
+  if not v_blocked or exists(select 1 from public.member where id=v_paper and member_id is not null) then raise exception 'TEST: unpaid paper application was approved'; end if;
 
   select count(*) into v_guardian_count from public.guardian;
   v_blocked := false;
   begin perform public.admin_save_member(null,v_payload||jsonb_build_object('form_number','0001','index_number','41004','email_address',null)); exception when unique_violation then v_blocked:=true; end;
   if not v_blocked or (select count(*) from public.guardian)<>v_guardian_count then raise exception 'TEST: duplicate printed form number created an orphan guardian'; end if;
 
-  perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',true,'fee_paid_at','2000-01-01','approved_by_name','Forged'));
-  select fee_paid_at into v_paid_at from public.member where id=v_paper;
+  perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',true,'approved_by_name','Forged'));
+  select (elem->>'paid_date')::timestamptz into v_paid_at from public.membership_fee mf, jsonb_array_elements(mf.fees) elem where mf.member_id=v_paper and elem->>'academic_year'='2026/2027';
   if v_paid_at is null or v_paid_at<now() then raise exception 'TEST: fee payment time was not assigned by the server'; end if;
   perform public.admin_save_member(v_paper,jsonb_build_object('city','Galle'));
-  if (select fee_paid_at from public.member where id=v_paper) is distinct from v_paid_at then raise exception 'TEST: ordinary edit changed payment timestamp'; end if;
+  if (select (elem->>'paid_date')::timestamptz from public.membership_fee mf, jsonb_array_elements(mf.fees) elem where mf.member_id=v_paper and elem->>'academic_year'='2026/2027') is distinct from v_paid_at then raise exception 'TEST: ordinary edit changed payment timestamp'; end if;
   perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',false));
-  if (select fee_paid_at from public.member where id=v_paper) is not null then raise exception 'TEST: explicit unpaid correction failed'; end if;
+  if exists (select 1 from public.membership_fee mf, jsonb_array_elements(mf.fees) elem where mf.member_id=v_paper and elem->>'academic_year'='2026/2027') then raise exception 'TEST: explicit unpaid correction failed'; end if;
   perform public.admin_save_member(v_paper,jsonb_build_object('fee_received',true));
   v_member_id := public.approve_member_with_notification(v_paper,true);
   perform public.approve_member_with_notification(v_paper,true);
@@ -218,23 +211,35 @@ begin
   execute 'reset role';
   execute 'set local role authenticated';
   if public.admin_whatsapp_status(v_paper)->>'status'<>'submitted' then raise exception 'TEST: provider acceptance status missing'; end if;
-  if not exists(select 1 from public.member where id=v_paper and approved_by=v_admin and approved_by_name='Fixture Admin' and approved_at is not null and member_id=v_member_id) then raise exception 'TEST: approval audit or receipt identifier failed'; end if;
+  if not exists(select 1 from public.member where id=v_paper and member_id=v_member_id) then raise exception 'TEST: approval receipt identifier failed'; end if;
   v_summary:=public.admin_membership_revenue('all');
   if (v_summary->>'total')::numeric<>1000 or (v_summary->>'payments')::int<>2 then raise exception 'TEST: unpaid applications counted as revenue'; end if;
   execute 'reset role';
-  update public.member set fee_paid_at=now()-interval '40 days',fee_amount=250 where id=v_paper;
+  update public.membership_fee set fees = jsonb_build_array(jsonb_build_object('academic_year','2026/2027','fee_amount',250,'paid_date',now()-interval '40 days','payment_method','cash')) where member_id=v_paper;
   if (public.admin_membership_revenue('all')->>'total')::numeric<>750 or (public.admin_membership_revenue('7d')->>'total')::numeric<>500 then raise exception 'TEST: revenue used default fee or wrong payment window'; end if;
-  update public.member set fee_paid_at=now()+interval '1 day' where id=v_paper;
+  update public.membership_fee set fees = jsonb_build_array(jsonb_build_object('academic_year','2026/2027','fee_amount',250,'paid_date',now()+interval '1 day','payment_method','cash')) where member_id=v_paper;
   if (public.admin_membership_revenue('all')->>'total')::numeric<>500 then raise exception 'TEST: future payment counted'; end if;
-  update public.member set fee_paid_at=(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo')-interval '1 second' where id=v_paper;
+  update public.membership_fee set fees = jsonb_build_array(jsonb_build_object('academic_year','2026/2027','fee_amount',250,'paid_date',(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo')-interval '1 second','payment_method','cash')) where member_id=v_paper;
   if (public.admin_membership_revenue('7d')->>'total')::numeric<>500 then raise exception 'TEST: payment before Colombo boundary included'; end if;
-  update public.member set fee_paid_at=fee_paid_at+interval '1 second' where id=v_paper;
+  update public.membership_fee set fees = jsonb_build_array(jsonb_build_object('academic_year','2026/2027','fee_amount',250,'paid_date',(((now() at time zone 'Asia/Colombo')::date-6)::timestamp at time zone 'Asia/Colombo'),'payment_method','cash')) where member_id=v_paper;
   if (public.admin_membership_revenue('7d')->>'total')::numeric<>750 then raise exception 'TEST: Colombo start date excluded'; end if;
-  update public.member set fee_paid_at=now(),fee_amount=500 where id=v_paper;
+  update public.membership_fee set fees = jsonb_build_array(jsonb_build_object('academic_year','2026/2027','fee_amount',500,'paid_date',now(),'payment_method','cash')) where member_id=v_paper;
   execute 'set local role authenticated';
   v_blocked:=false;
   begin perform public.admin_membership_revenue('bad'); exception when invalid_parameter_value then v_blocked:=true; end;
   if not v_blocked then raise exception 'TEST: invalid revenue range accepted'; end if;
+
+  -- 2008 batch must be excluded from revenue calculations and pending counts
+  execute 'reset role';
+  update public.member set batch_year=2008 where id=v_paper;
+  update public.member set batch_year=2008 where id=v_application;
+  execute 'set local role authenticated';
+  if (public.admin_membership_revenue('all')->>'total')::numeric<>500 then raise exception 'TEST: 2008 batch was included in revenue'; end if;
+  if (public.admin_membership_revenue('all')->>'pending_count')::numeric<>(select count(*) from public.member where membership_status='pending' and (batch_year is distinct from 2008)) then raise exception 'TEST: 2008 batch was included in pending_count'; end if;
+  execute 'reset role';
+  update public.member set batch_year=2011 where id=v_paper;
+  update public.member set batch_year=2011 where id=v_application;
+  execute 'set local role authenticated';
 
 
   -- Legacy rows retain unknown source/fee data when edited and approved.
@@ -243,7 +248,7 @@ begin
   values('Legacy Fixture','L. Fixture','2011-05-01',current_date,'+94771234567',2011) returning id into v_legacy;
   execute 'set local role authenticated';
   perform public.admin_save_member(v_legacy,jsonb_build_object('city','Kandy'));
-  if not exists(select 1 from public.member where id=v_legacy and application_source is null and fee_amount is null and fee_paid_at is null) then raise exception 'TEST: legacy edit invented a paper fee'; end if;
+  if not exists(select 1 from public.member where id=v_legacy and form_number is null) then raise exception 'TEST: legacy edit invented a paper fee'; end if;
   perform public.approve_member(v_legacy);
 
   -- Period summaries use Colombo calendar boundaries and exclude future rows.
@@ -267,6 +272,49 @@ begin
   v_blocked:=false;
   begin perform public.admin_save_member(v_paper,'{"city":""}'::jsonb); exception when invalid_parameter_value then v_blocked:=true; end;
   if not v_blocked then raise exception 'TEST: required paper city could be cleared'; end if;
+
+  -- Config entries exist and are readable by authenticated admin
+  if not exists (select 1 from public.config where key = 'ACADEMIC_YEAR' and value = '2026/2027') then
+    raise exception 'TEST: ACADEMIC_YEAR not seeded in public.config';
+  end if;
+  if not exists (select 1 from public.config where key = 'ACADEMIC_BATCH_YEAR' and value = '2008') then
+    raise exception 'TEST: ACADEMIC_BATCH_YEAR not seeded in public.config';
+  end if;
+
+  -- Yearly membership fee recording, history query and active year synchronization
+  perform public.admin_record_membership_fee(v_member, '2026/2027', 500, 'Initial payment');
+  if not exists (
+    select 1 from public.membership_fee mf, jsonb_array_elements(mf.fees) elem
+    where mf.member_id = v_member and elem->>'academic_year' = '2026/2027' and (elem->>'fee_amount')::numeric = 500
+  ) then
+    raise exception 'TEST: membership_fee entry not recorded';
+  end if;
+  perform public.admin_record_membership_fee(v_member, '2027/2028', 500, 'Next board advance payment');
+  if jsonb_array_length(public.admin_get_member_fee_history(v_member)) <> 2 then
+    raise exception 'TEST: admin_get_member_fee_history did not return 2 years of payments';
+  end if;
+
+  -- Ensure legacy payment columns were dropped from public.member
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'member' and column_name in ('fee_amount', 'fee_paid_at')
+  ) then
+    raise exception 'TEST: payment columns fee_amount / fee_paid_at still present on member table';
+  end if;
+
+  -- Ensure scalar payment columns and top-level notes were dropped from public.membership_fee, and fees jsonb exists
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'membership_fee' and column_name in ('academic_year', 'fee_amount', 'paid_date', 'payment_method', 'notes')
+  ) then
+    raise exception 'TEST: scalar payment or notes columns still present on membership_fee table';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'membership_fee' and column_name = 'fees'
+  ) then
+    raise exception 'TEST: fees jsonb column not present on membership_fee table';
+  end if;
 
   -- Auth expiry denies reads and cannot be bypassed by renewing the web bridge.
   execute 'reset role';

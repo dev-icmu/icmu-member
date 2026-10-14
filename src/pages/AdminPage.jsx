@@ -4,7 +4,7 @@ import { CustomEase } from 'gsap/CustomEase';
 import { useGSAP } from '@gsap/react';
 import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, Layers3, Sparkles, ChartNoAxesCombined, LogOut, ArrowUpRight, RefreshCw, ChevronRight, ShieldCheck, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Layers3, Sparkles, ChartNoAxesCombined, LogOut, ArrowUpRight, RefreshCw, ChevronRight, ShieldCheck, PanelLeft, Receipt } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/motion/button/base';
@@ -16,6 +16,7 @@ import { AdminDashboard } from '@/features/admin/components/AdminDashboard';
 import { MemberDirectory } from '@/features/admin/components/MemberDirectory';
 import { SkillsTab } from '@/features/admin/components/SkillsTab';
 import { TeamsTab } from '@/features/admin/components/TeamsTab';
+import { FeesTab } from '@/features/admin/components/FeesTab';
 import { useAdminAnalytics } from '@/entities/members/hooks/useMembers';
 import GradualBlur from '@/components/reactbits/GradualBlur';
 import { EASE_OUT } from '@/lib/ease';
@@ -27,7 +28,7 @@ import '../features/admin/motion.css';
 
 gsap.registerPlugin(useGSAP, CustomEase);
 const headerEase = CustomEase.create('admin-header', EASE_OUT.join(','));
-const items=[['dashboard','Dashboard',LayoutDashboard],['members','Members',Users],['applications','Applications',ClipboardList],['teams','Production teams',Layers3],['skills','Skills',Sparkles],['analytics','Analytics',ChartNoAxesCombined]];
+const items=[['dashboard','Dashboard',LayoutDashboard],['members','Members',Users],['applications','Applications',ClipboardList],['fees','Fees',Receipt],['teams','Production teams',Layers3],['skills','Skills',Sparkles],['analytics','Analytics',ChartNoAxesCombined]];
 function AdminBrand() {
   return <Link className="adm-brand" to="/admin" aria-label="ICMU Member dashboard"><span><IcmuLogo/></span><div><strong>MEMBER<span> /</span></strong><small>ISIPATHANA COLLEGE MEDIA UNIT</small></div></Link>;
 }
@@ -89,7 +90,7 @@ export function AdminWorkspace() {
     return () => media.revert();
   }, { scope:topbarRef });
   async function signOut(){setSigningOut(true);try{await logout();navigate('/login',{replace:true});}catch(err){setError(err.message);setSigningOut(false);}}
-  async function refresh(){setRefreshing(true);try{await Promise.all(['members','member-batches','membership-revenue','application-activity','admin-analytics','teams','team-members','skills'].map(key=>qc.invalidateQueries({queryKey:[key]})));}finally{setRefreshing(false);}}
+  async function refresh(){setRefreshing(true);try{await Promise.all(['members','member-batches','membership-revenue','application-activity','admin-analytics','teams','team-members','skills','fees','member-fee-history','app-config'].map(key=>qc.invalidateQueries({queryKey:[key]})));}finally{setRefreshing(false);}}
   if(!active)return <Navigate to="/admin" replace/>;
   return <AnimatedSidebarProvider className="admin-workspace" style={{'--sidebar-width':'244px','--sidebar-width-icon':'72px'}}>
     <AnimatedSidebar variant="inset" ariaLabel="Admin navigation" panelClassName="adm-sidebar-panel" className="adm-sidebar">
@@ -111,7 +112,7 @@ export function AdminWorkspace() {
         className="adm-gradual-blur-mobile"
       />
       <header ref={topbarRef} className="adm-topbar"><nav className="adm-breadcrumb" aria-label="Breadcrumb"><AnimatedSidebarTrigger className="adm-desktop-navigation-toggle"><PanelLeft size={18}/></AnimatedSidebarTrigger><span>Workspace</span><ChevronRight size={13} aria-hidden="true"/><strong aria-current="page">{active[1]}</strong></nav><div className="adm-header-island"><div className="adm-mobile-brand"><AdminBrand/></div><div className="adm-topbar-actions"><AdminSearch className="adm-topbar-search"/><Button type="button" variant="ghost" size="icon" className="adm-header-refresh" disabled={refreshing} aria-label="Refresh workspace data" onClick={refresh}><RefreshCw size={17} className={refreshing?'adm-spin':''}/></Button><AdminAccountMenu user={user} name={name} role={role} signingOut={signingOut} onSignOut={signOut} onRefresh={refresh}/></div></div></header>
-      <div className="adm-page" id="admin-main"><nav className="adm-mobile-breadcrumb" aria-label="Breadcrumb"><Link to="/admin">Workspace</Link><ChevronRight size={12} aria-hidden="true"/><span aria-current="page">{active[1]}</span></nav>{error&&<div role="alert" className="adm-error">{error}</div>}{section==='dashboard'||section==='analytics'?<AdminDashboard analytics={section==='analytics'}/>:section==='members'||section==='applications'?<MemberDirectory key={section} applications={section==='applications'}/>:section==='teams'?<TeamsTab/>:<SkillsTab/>}</div>
+      <div className="adm-page" id="admin-main"><nav className="adm-mobile-breadcrumb" aria-label="Breadcrumb"><Link to="/admin">Workspace</Link><ChevronRight size={12} aria-hidden="true"/><span aria-current="page">{active[1]}</span></nav>{error&&<div role="alert" className="adm-error">{error}</div>}{section==='dashboard'||section==='analytics'?<AdminDashboard analytics={section==='analytics'}/>:section==='members'||section==='applications'?<MemberDirectory key={section} applications={section==='applications'}/>:section==='fees'?<FeesTab/>:section==='teams'?<TeamsTab/>:section==='skills'?<SkillsTab/>:<Navigate to="/admin" replace/>}</div>
       <footer className="adm-workspace-footer"><span>ICMU MEMBER</span><span><span className="adm-dot"/> {summary.isError?'Connection needs attention':summary.isFetching?'Updating workspace':'Connected to the unit'}</span></footer>
     </AnimatedSidebarInset>
     <GradualBlur

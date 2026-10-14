@@ -25,10 +25,41 @@ export async function invokeAdminBridge(client, body) {
 }
 
 export async function resolveAdminSession(client) {
-  const { data, error } = await timeout(client.auth.getUser());
+  // Proactively check session to refresh expired/expiring tokens
+  if (typeof client.auth?.getSession === 'function') {
+    try {
+      const { data: sessionData } = await timeout(client.auth.getSession(), 10000);
+      const session = sessionData?.session;
+      if (session?.expires_at && (session.expires_at * 1000 - Date.now() < 120000)) {
+        if (typeof client.auth?.refreshSession === 'function') {
+          await timeout(client.auth.refreshSession(), 10000).catch(() => {});
+        }
+      }
+    } catch {
+      // Continue to getUser verification
+    }
+  }
+
+  let { data, error } = await timeout(client.auth.getUser());
   if (error) {
     if (error.name === 'AuthSessionMissingError') return { ...signedOutState };
-    throw new Error('Your session could not be verified. Please sign in again.');
+    // If token expired/invalid, attempt one refresh before failing
+    if ((error.status === 401 || error.name === 'AuthApiError' || error.message?.includes('expired') || error.message?.includes('JWT')) && typeof client.auth?.refreshSession === 'function') {
+      try {
+        const { data: refreshed, error: refreshErr } = await timeout(client.auth.refreshSession(), 10000);
+        if (!refreshErr && refreshed?.session) {
+          const retry = await timeout(client.auth.getUser());
+          data = retry.data;
+          error = retry.error;
+        }
+      } catch {
+        // Fall through to error check
+      }
+    }
+    if (error) {
+      if (error.name === 'AuthSessionMissingError') return { ...signedOutState };
+      throw new Error('Your session could not be verified. Please sign in again.');
+    }
   }
   const user = data?.user;
   if (!user) return { ...signedOutState };
@@ -78,7 +109,11 @@ export function createAdminAuthController(client, queryClient, publish) {
   }
   function apply(next) {
     const nextIdentity = next.user?.id || null;
-    if (identity !== nextIdentity || !next.isAdmin) clearCache();
+    if (identity !== nextIdentity || !next.isAdmin) {
+      clearCache();
+    } else if (next.isAdmin && typeof queryClient?.invalidateQueries === 'function') {
+      void queryClient.invalidateQueries();
+    }
     identity = nextIdentity;
     emit(next);
   }
@@ -93,8 +128,15 @@ export function createAdminAuthController(client, queryClient, publish) {
     if (!silent || !state.isAdmin) emit({ ...signedOutState, loading: true, accessLoading: true });
     const check = (async () => {
       let next;
-      try { next = await resolveAdminSession(client); }
-      catch (error) { next = { ...signedOutState, authError: error.message }; }
+      try {
+        next = await resolveAdminSession(client);
+      } catch (error) {
+        const isNetworkTimeout = error.message?.includes('timed out') || error.message?.includes('temporarily unavailable');
+        if (silent && state.isAdmin && isNetworkTimeout) {
+          return state;
+        }
+        next = { ...signedOutState, authError: error.message };
+      }
       if (active && ticket === revision) apply(next);
       return ticket === revision ? next : null;
     })();
@@ -107,8 +149,13 @@ export function createAdminAuthController(client, queryClient, publish) {
     pending = null;
     clearTimeout(scheduled);
   }
+  let lastFocusTime = 0;
   const onFocus = () => {
-    if (document.visibilityState === 'visible') void refreshAccess({ silent: true });
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    if (now - lastFocusTime < 100) return;
+    lastFocusTime = now;
+    void refreshAccess({ silent: true });
   };
 
   return {
@@ -126,6 +173,11 @@ export function createAdminAuthController(client, queryClient, publish) {
           return;
         }
         if (event === 'INITIAL_SESSION') return;
+        if (event === 'TOKEN_REFRESHED') {
+          if (typeof queryClient?.invalidateQueries === 'function') {
+            void queryClient.invalidateQueries();
+          }
+        }
         if (busy) return;
         if (session?.user?.id !== identity) {
           invalidate();
@@ -137,7 +189,11 @@ export function createAdminAuthController(client, queryClient, publish) {
       });
       subscription = result.data.subscription;
       void refreshAccess();
-      heartbeat = setInterval(() => { if (state.isAuthenticated) void refreshAccess({ silent: true }); }, 30000);
+      heartbeat = setInterval(() => {
+        if (state.isAuthenticated && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
+          void refreshAccess({ silent: true });
+        }
+      }, 300000);
       if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onFocus);
       if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
     },

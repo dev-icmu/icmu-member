@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, CirclePause, CirclePlay, LockKeyhole, Pencil, Plus, Search, Tags, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, CirclePause, CirclePlay, LockKeyhole, MoreVertical, Pencil, Plus, Search, Tags, Users } from 'lucide-react';
 import { Button } from '@/components/motion/button/base';
 import { StatefulButton } from '@/components/motion/button/stateful';
 import { Input } from '@/components/motion/input';
 import { Checkbox } from '@/components/motion/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/context/ToastContext';
-import { useMembers } from '@/entities/members/hooks/useMembers';
+import { useAdminAnalytics, useMembers } from '@/entities/members/hooks/useMembers';
 import { useAssignMemberToTeam, useRemoveMemberFromTeam, useTeamRoster } from '@/entities/teams/hooks/useTeams';
 import { AdminDialog } from './AdminDialog';
 import './catalog.css';
@@ -199,6 +205,7 @@ function TeamRoster({ team, onClose }) {
 export function CatalogPanel({ kind, query, createMutation, updateMutation, skillsQuery, onSelectSkill }) {
   const isTeam = kind === 'team';
   const title = isTeam ? 'Teams' : 'Skills';
+  const analytics = useAdminAnalytics();
   const [search, setSearch] = useState('');
   const [activity, setActivity] = useState('all');
   const [editor, setEditor] = useState(null);
@@ -206,6 +213,17 @@ export function CatalogPanel({ kind, query, createMutation, updateMutation, skil
   const [rosterId, setRosterId] = useState(null);
   const rows = query.data || [];
   const activeCount = rows.filter(row => row.is_active !== false).length;
+
+  const skillCounts = useMemo(() => {
+    const map = new Map();
+    if (Array.isArray(analytics.data?.interests)) {
+      for (const item of analytics.data.interests) {
+        if (item?.id) map.set(item.id, Number(item.count || 0));
+      }
+    }
+    return map;
+  }, [analytics.data?.interests]);
+
   const filtered = rows.filter(row => {
     const matchingActivity = activity === 'all' || (activity === 'active' ? row.is_active !== false : row.is_active === false);
     return matchingActivity && `${row.team_name || row.skill_name} ${row.skill_desc || ''}`.toLowerCase().includes(search.trim().toLowerCase());
@@ -217,14 +235,160 @@ export function CatalogPanel({ kind, query, createMutation, updateMutation, skil
     <div className="adm-catalog-top"><div><span className="adm-catalog-eyebrow">UNIT ORGANISATION</span><h2>{title}</h2><p>{isTeam ? 'Build production teams and keep their member lists up to date.' : 'Manage the skills members can learn and bring to the unit.'}</p></div><Button type="button" onClick={() => setEditor({ mode: 'create' })} disabled={query.isPending || query.isError || mutationPending}><Plus size={17} /> Add {kind}</Button></div>
     <div className="adm-catalog-toolbar"><Input aria-label={`Search ${title.toLowerCase()}`} placeholder={`Search ${title.toLowerCase()}`} leftIcon={<Search />} value={search} onChange={setSearch} className="adm-catalog-search" /><div className="adm-catalog-filters" role="group" aria-label="Filter by status">{[['all', 'All', rows.length], ['active', 'Active', activeCount], ['inactive', 'Inactive', rows.length - activeCount]].map(([value, label, count]) => <button type="button" aria-pressed={activity === value} key={value} onClick={() => setActivity(value)}>{label}<span>{query.isPending || query.isError ? '–' : count}</span></button>)}</div></div>
     <QueryState query={query} subject={title.toLowerCase()} empty={filtered.length === 0 ? rows.length === 0 ? `No ${title.toLowerCase()} have been created yet. Use Add ${kind} to get started.` : `No ${title.toLowerCase()} match these filters.` : null}>
-      <div className={`adm-catalog-grid ${isTeam ? '' : 'adm-catalog-skills'}`}>{filtered.map(row => <article className="adm-catalog-card" key={row.id}>
-        <div className="adm-catalog-card-head"><span className="adm-catalog-symbol">{isTeam ? <Users size={20} /> : <Tags size={20} />}</span><span className={`adm-catalog-status ${row.is_active === false ? 'is-inactive' : ''}`}><i />{row.is_active === false ? 'Inactive' : 'Active'}</span></div>
-        <h3 className={!isTeam && onSelectSkill ? 'adm-catalog-clickable-title' : ''} onClick={() => !isTeam && onSelectSkill?.(row)}>{row.team_name || row.skill_name}</h3>
-        {isTeam ? <><p className="adm-catalog-count"><strong>{row.member_count}</strong> {row.member_count === 1 ? 'member' : 'members'} assigned</p><div className="adm-catalog-tags">{(row.required_skills || []).length ? row.required_skills.map(id => <span key={id}>{skillsQuery.data?.find(skill => skill.id === id)?.skill_name || 'Skill unavailable'}</span>) : <span className="is-empty">No required skills</span>}</div></> : <p className="adm-catalog-description">{row.skill_desc || 'No description added.'}</p>}
-        <div className="adm-catalog-card-actions">{isTeam ? <Button type="button" variant="secondary" onClick={() => setRosterId(row.id)}>View members <ArrowRight size={15} /></Button> : onSelectSkill ? <Button type="button" variant="secondary" onClick={() => onSelectSkill(row)}>View students <ArrowRight size={15} /></Button> : null}<div className="adm-catalog-utilities">
-          {row.is_protected ? <span className="adm-catalog-protected" title="Standard catalog entries are protected from editing and deactivation."><LockKeyhole size={14} /> Protected</span> : <><Button type="button" variant="ghost" onClick={() => setEditor({ mode: 'edit', record: row })} disabled={mutationPending} aria-label={`Edit ${row.team_name || row.skill_name}`}><Pencil size={15} /><span>Edit</span></Button><Button type="button" variant="ghost" disabled={mutationPending} onClick={() => setActivityRecord(row)} aria-label={`${row.is_active === false ? 'Reactivate' : 'Deactivate'} ${row.team_name || row.skill_name}`}>{row.is_active === false ? <CirclePlay size={17} /> : <CirclePause size={17} />}<span>{row.is_active === false ? 'Reactivate' : 'Deactivate'}</span></Button></>}
-        </div></div>
-      </article>)}</div>
+      <div className={`adm-catalog-grid ${isTeam ? '' : 'adm-catalog-skills'}`}>{filtered.map(row => {
+        const count = isTeam
+          ? (row.member_count ?? 0)
+          : (analytics.isPending && !analytics.data ? undefined : (skillCounts.get(row.id) ?? 0));
+        const hasCount = typeof count === 'number' && count > 0;
+
+        return (
+          <article className="adm-catalog-card" key={row.id}>
+            <div className="adm-catalog-card-head">
+              <div className="adm-catalog-head-left">
+                <span className="adm-catalog-symbol" aria-hidden="true">
+                  {isTeam ? <Users size={16} /> : <Tags size={16} />}
+                </span>
+                
+                {row.is_protected && (
+                  <span className="adm-catalog-protected-badge" title="Protected standard entry">
+                    <LockKeyhole size={12} />
+                  </span>
+                )}
+              </div>
+
+              <div className="adm-catalog-head-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="adm-catalog-menu-trigger"
+                      aria-label={`Options for ${row.team_name || row.skill_name}`}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="adm-catalog-menu-dropdown">
+                    {row.is_protected ? (
+                      <div className="adm-catalog-menu-protected">
+                        <LockKeyhole size={13} />
+                        <span>Protected</span>
+                      </div>
+                    ) : (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => setEditor({ mode: 'edit', record: row })}
+                          disabled={mutationPending}
+                          className="adm-catalog-menu-item"
+                        >
+                          <Pencil size={14} />
+                          <span>Edit {isTeam ? 'team' : 'skill'}</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setActivityRecord(row)}
+                          disabled={mutationPending}
+                          className="adm-catalog-menu-item"
+                        >
+                          {row.is_active === false ? <CirclePlay size={14} /> : <CirclePause size={14} />}
+                          <span>{row.is_active === false ? 'Reactivate' : 'Deactivate'}</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            <div className="adm-catalog-card-body">
+              <h3
+                className={!isTeam && onSelectSkill ? 'adm-catalog-clickable-title' : ''}
+                onClick={() => !isTeam && onSelectSkill?.(row)}
+                title={row.team_name || row.skill_name}
+              >
+                {row.team_name || row.skill_name}
+              </h3>
+
+              {isTeam ? (
+                <div className="adm-catalog-tags">
+                  {(row.required_skills || []).length ? (
+                    row.required_skills.map(id => (
+                      <span key={id}>
+                        {skillsQuery.data?.find(skill => skill.id === id)?.skill_name || 'Skill unavailable'}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="is-empty">No required skills</span>
+                  )}
+                </div>
+              ) : (
+                <p className="adm-catalog-description" title={row.skill_desc || 'No description added.'}>
+                  {row.skill_desc || 'No description added.'}
+                </p>
+              )}
+            </div>
+
+            <div className="adm-catalog-card-footer">
+              <div className="adm-catalog-students-stat">
+                {count === undefined ? (
+                  <span className="adm-catalog-stat-val is-loading">…</span>
+                ) : hasCount ? (
+                  <span className="adm-catalog-stat-val has-students">
+                    <Users size={12} />
+                    <strong>{count}</strong> {count === 1 ? (isTeam ? 'member' : 'student') : (isTeam ? 'members' : 'students')}
+                  </span>
+                ) : (
+                  <span className="adm-catalog-stat-val is-empty">--</span>
+                )}
+              </div>
+
+              {isTeam ? (
+                hasCount ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="adm-catalog-view-btn"
+                    onClick={() => setRosterId(row.id)}
+                  >
+                    View members <ArrowRight size={13} />
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    className="adm-catalog-empty-action"
+                    onClick={() => setRosterId(row.id)}
+                    aria-label={`View ${row.team_name} (no members assigned)`}
+                    title="No members yet. Click to view roster."
+                  >
+                    --
+                  </button>
+                )
+              ) : onSelectSkill ? (
+                hasCount ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="adm-catalog-view-btn"
+                    onClick={() => onSelectSkill(row)}
+                  >
+                    View students <ArrowRight size={13} />
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    className="adm-catalog-empty-action"
+                    onClick={() => onSelectSkill(row)}
+                    aria-label={`View ${row.skill_name} (no students enrolled)`}
+                    title="No students enrolled yet. Click to view roster."
+                  >
+                    --
+                  </button>
+                )
+              ) : null}
+            </div>
+          </article>
+        );
+      })}</div>
     </QueryState>
     {isTeam && skillsQuery.isError && <p className="adm-catalog-error" role="alert">Skill names could not be loaded. <button type="button" onClick={() => skillsQuery.refetch()}>Retry skills</button></p>}
     <p className="adm-catalog-footnote"><LockKeyhole size={14} /> Protected entries are part of the unit&apos;s standard setup. Deactivation keeps existing records.</p>

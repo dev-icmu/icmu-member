@@ -12,3 +12,15 @@
 @media(prefers-reduced-motion:reduce){.adm-application-layer *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 .adm-irreversible-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(73,201,119,.08);border:1px solid rgba(73,201,119,.25);color:#a4efbf;font-size:11px;line-height:1.5;margin-top:12px}
 .adm-irreversible-banner svg{color:var(--primary);flex-shrink:0}
+.application-fee-checkout{display:flex;align-items:center;gap:14px;width:100%;padding:16px 18px;border-radius:16px;border:1.5px solid #1c3826;background:#060f09;color:#e4f9ec;cursor:pointer;text-align:left;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform 120ms ease,background 140ms ease,border-color 140ms ease}
+.application-fee-checkout:active:not(:disabled){transform:scale(.98)}
+.application-fee-checkout.is-paid{background:rgba(92,227,142,.08);border-color:rgba(92,227,142,.4);box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.application-fee-checkout:disabled{cursor:not-allowed;opacity:.9}
+.application-fee-checkout-check{display:grid;place-items:center;flex-shrink:0}
+.application-fee-checkout-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.application-fee-checkout-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.application-fee-checkout-title strong{font-size:13.5px;font-weight:600;color:#e4f9ec}
+.application-fee-checkout.is-paid .application-fee-checkout-title strong{color:#5ce38e}
+.application-fee-checkout-amount{font-size:15px;font-weight:700;color:#5ce38e;font-variant-numeric:tabular-nums}
+.application-fee-checkout-info small{font-size:11.5px;color:#8da495;line-height:1.45}
+@media(max-width:600px){.application-fee-checkout{min-height:56px;padding:14px 16px}.application-fee-checkout-title{flex-direction:column;align-items:flex-start;gap:2px}}

@@ -13,8 +13,12 @@ import App from './App.jsx';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: (failureCount, error) => {
+        if (error?.status === 404 || error?.code === 'PGRST116' || error?.name === 'AbortError') return false;
+        return failureCount < 2;
+      },
     },
   },
 });

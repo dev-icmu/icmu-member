@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { UserPlus, SlidersHorizontal, Pencil, MoreHorizontal, ListChecks, MessageCircle, ArrowUpRight, Users, GraduationCap } from 'lucide-react';
+import { UserPlus, SlidersHorizontal, Pencil, MoreHorizontal, ListChecks, MessageCircle, ArrowUpRight, Users, GraduationCap, CheckCircle2 } from 'lucide-react';
 import { Button, ButtonLink } from '@/components/motion/button/base';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { MemberDataTable } from './MemberDataTable';
 import { useMembers, useMember, useApproveMember, useRejectMember, useReviewMember, useSetMemberActive, useMemberBatches, useAdminAnalytics } from '@/entities/members/hooks/useMembers';
+import { useMemberFeeHistory, getActiveFee, isFeePaid, useAppConfig, DEFAULT_ACADEMIC_YEAR, DEFAULT_FEE_LKR } from '@/entities/members/hooks/useFees';
 import { useSkills } from '@/entities/skills/hooks/useSkills';
 import { useToast } from '@/context/ToastContext';
 import { AdminSearch } from './AdminSearch';
@@ -16,20 +17,89 @@ import { buildApprovalWhatsappLink } from '@/entities/members/lib/whatsappLink';
 
 export function MemberStatus({ member }) { const status=member.membership_status==='accepted' ? member.is_active===false ? 'inactive' : 'active' : member.membership_status; return <span className={`adm-status adm-status-${status}`}><i />{status}</span>; }
 export { displayDate };
-export const feeLabel=member=>member.fee_paid_at ? `LKR ${Number(member.fee_amount).toLocaleString('en-LK')} received` : member.application_source==='paper' ? 'Fee not received' : 'Not recorded';
+export const feeLabel = (member, activeYear = DEFAULT_ACADEMIC_YEAR, defaultFee = DEFAULT_FEE_LKR) => {
+  const activeFee = getActiveFee(member, activeYear);
+  return activeFee ? `LKR ${Number(activeFee.fee_amount || defaultFee).toLocaleString('en-LK')} received` : member?.form_number ? 'Fee not received' : 'Not recorded';
+};
+function PaidReceiptDetails({ member, activeYear = DEFAULT_ACADEMIC_YEAR, defaultFee = DEFAULT_FEE_LKR }) {
+  const activeFee = getActiveFee(member, activeYear);
+  const amount = Number(activeFee?.fee_amount || defaultFee).toLocaleString('en-LK', { minimumFractionDigits: 2 });
+  const paidDate = activeFee?.paid_date || member?.created_at;
+  return <section className="adm-receipt adm-receipt-paid" aria-label="Membership fee payment confirmation">
+    <div className="adm-receipt-heading">
+      <div>
+        <span className="adm-eyebrow adm-eyebrow-paid">
+          <CheckCircle2 size={12} aria-hidden="true" /> PAID
+        </span>
+        <h3>Membership fee received ({activeFee?.academic_year || activeYear})</h3>
+      </div>
+      <span className="adm-id">Form {member.form_number || 'not recorded'}</span>
+    </div>
+    <p>Payment of <strong>LKR {amount}</strong> was confirmed on {displayDate(paidDate)}.</p>
+    <dl>
+      <div><dt>Name</dt><dd>{titleCase(member.full_name)}</dd></div>
+      <div><dt>Member ID</dt><dd className="adm-receipt-id">{member.member_id || 'Not assigned'}</dd></div>
+      <div><dt>Fee amount</dt><dd className="adm-receipt-amount">LKR {amount}</dd></div>
+      <div><dt>Fee received</dt><dd>{displayDate(paidDate)}</dd></div>
+      <div><dt>Joined date</dt><dd>{displayDate(member.joined_date)}</dd></div>
+      <div><dt>Admission No</dt><dd>{member.index_number || 'Not recorded'}</dd></div>
+    </dl>
+    <div className="adm-receipt-audit">
+      <span>Processed by: {activeFee?.recorded_by_name || member.processed_by_name || 'Not recorded'}</span>
+    </div>
+  </section>;
+}
 function ReceiptDetails({member}) {
-  return <section className="adm-receipt" aria-label="Paper receipt details"><div className="adm-receipt-heading"><div><span className="adm-eyebrow">TEAR-OFF RECEIPT</span><h3>Ready to write on the receipt</h3></div><span className="adm-id">Form {member.form_number || 'not recorded'}</span></div><p>Copy these details onto the student's paper receipt, then tear it off and return it.</p><dl><div><dt>Name</dt><dd>{titleCase(member.full_name)}</dd></div><div><dt>Member ID</dt><dd className="adm-receipt-id">{member.member_id}</dd></div><div><dt>Joined date</dt><dd>{displayDate(member.joined_date)}</dd></div></dl><div className="adm-receipt-audit"><span>Processed by: {member.processed_by_name || 'Not recorded'}</span><span>Approved by: {member.approved_by_name || 'Not recorded'}</span></div></section>;
+  return <section className="adm-receipt" aria-label="Paper receipt details"><div className="adm-receipt-heading"><div><span className="adm-eyebrow">TEAR-OFF RECEIPT</span><h3>Ready to write on the receipt</h3></div><span className="adm-id">Form {member.form_number || 'not recorded'}</span></div><p>Copy these details onto the student's paper receipt, then tear it off and return it.</p><dl><div><dt>Name</dt><dd>{titleCase(member.full_name)}</dd></div><div><dt>Member ID</dt><dd className="adm-receipt-id">{member.member_id}</dd></div><div><dt>Joined date</dt><dd>{displayDate(member.joined_date)}</dd></div></dl><div className="adm-receipt-audit"><span>Processed by: {member.processed_by_name || 'Not recorded'}</span></div></section>;
+}
+function MemberFeeHistorySection({ memberId }) {
+  const { data: fees, isLoading } = useMemberFeeHistory(memberId);
+  if (isLoading || !fees || fees.length === 0) return null;
+  return (
+    <section className="adm-profile-section" aria-label="Academic year fee payments">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <h3 style={{ margin: 0 }}>Academic year fee history</h3>
+        <span style={{ fontSize: '11px', color: '#688471', fontFamily: 'monospace' }}>{fees.length} cycle{fees.length > 1 ? 's' : ''}</span>
+      </div>
+      <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #1a3022', background: '#070f09' }}>
+        <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #162a1d', color: '#688471', background: '#0a170f' }}>
+              <th style={{ padding: '8px 12px', fontWeight: 600 }}>Cycle</th>
+              <th style={{ padding: '8px 12px', fontWeight: 600 }}>Amount</th>
+              <th style={{ padding: '8px 12px', fontWeight: 600 }}>Date</th>
+              <th style={{ padding: '8px 12px', fontWeight: 600 }}>Recorded By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fees.map((f, i) => (
+              <tr key={f.id || f.academic_year || i} style={{ borderBottom: i < fees.length - 1 ? '1px solid #102015' : 'none' }}>
+                <td style={{ padding: '8px 12px', color: '#49c977', fontFamily: 'monospace', fontWeight: 700 }}>{f.academic_year}</td>
+                <td style={{ padding: '8px 12px', color: '#e4f9ec' }}>LKR {Number(f.fee_amount || 500).toLocaleString('en-LK')}</td>
+                <td style={{ padding: '8px 12px', color: '#95b79e' }}>{displayDate(f.paid_date)}</td>
+                <td style={{ padding: '8px 12px', color: '#688471' }}>{f.recorded_by_name || 'System / Admin'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 export function MemberDetails({ id, onClose, onEdit }) {
   const query=useMember(id); const skills=useSkills();
+  const configQuery = useAppConfig();
+  const activeYear = configQuery.data?.ACADEMIC_YEAR || DEFAULT_ACADEMIC_YEAR;
+  const defaultFee = configQuery.data?.MEMBERSHIP_FEE_LKR || DEFAULT_FEE_LKR;
   const m=query.data;
   const whatsappLink=buildApprovalWhatsappLink(m);
   return <AdminDialog open onClose={onClose} title="Member profile" wide drawer footer={<><Button type="button" variant="secondary" onClick={onClose}>Close</Button>{m&&<Button type="button" onClick={()=>onEdit(id)}><Pencil size={16} /> Edit details</Button>}</>}>
     {query.isPending ? <div className="adm-state" role="status">Loading profile...</div> : query.isError ? <div className="adm-state" role="alert"><p>{memberError(query.error)}</p><Button type="button" onClick={()=>query.refetch()}>Try again</Button></div> : <>
       <div className="adm-profile-head"><span className="adm-avatar adm-avatar-large">{m.full_name?.charAt(0).toUpperCase()}</span><div><h3>{titleCase(m.full_name)}</h3><p>{m.member_id || 'Member ID assigned after approval'} · <MemberStatus member={m} /></p></div></div>
       {m.membership_status==='accepted'&&m.is_active===true&&<section className="adm-profile-section adm-whatsapp-share" aria-label="Share approval"><h3>Share approval</h3>{whatsappLink?<><p>Open the prepared message, then tap Send in WhatsApp.</p><ButtonLink href={whatsappLink} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="adm-whatsapp-link"><MessageCircle size={18} aria-hidden="true"/>Open WhatsApp<ArrowUpRight size={16} aria-hidden="true"/></ButtonLink><small>Uses the WhatsApp account signed in on this device.</small></>:<p>Add a valid international WhatsApp number and complete the member's name, ID and joined date to share their approval.</p>}</section>}
-      {m.membership_status==='accepted'&&m.member_id&&<ReceiptDetails member={m}/>}
-      <dl className="adm-details">{[['Form number',m.form_number],['Membership fee',feeLabel(m)],['Fee received on',m.fee_paid_at?displayDate(m.fee_paid_at):null],['Admission number',m.index_number],['Batch',m.batch_year],['Date of birth',displayDate(m.date_of_birth)],['Joined',displayDate(m.joined_date)],['City / town',titleCase(m.city)],['WhatsApp',m.whatsapp_number],['Email',m.email_address],['Guardian',titleCase(m.guardian?.guardian_name)],['Guardian contact',m.guardian?.contact_number],['Guardian occupation',titleCase(m.guardian?.occupation)],['Last updated',displayDate(m.updated_at)]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value || 'Not recorded'}</dd></div>)}</dl>
+      {getActiveFee(m, activeYear) ? <PaidReceiptDetails member={m} activeYear={activeYear} defaultFee={defaultFee}/> : m.membership_status==='accepted'&&m.member_id ? <ReceiptDetails member={m}/> : null}
+      <MemberFeeHistorySection memberId={id} />
+      <dl className="adm-details">{[['Form number',m.form_number],['Membership fee',feeLabel(m, activeYear, defaultFee)],['Fee received on',getActiveFee(m, activeYear)?displayDate(getActiveFee(m, activeYear).paid_date):null],['Admission number',m.index_number],['Batch',m.batch_year],['Date of birth',displayDate(m.date_of_birth)],['Joined',displayDate(m.joined_date)],['City / town',titleCase(m.city)],['WhatsApp',m.whatsapp_number],['Email',m.email_address],['Guardian',titleCase(m.guardian?.guardian_name)],['Guardian contact',m.guardian?.contact_number],['Guardian occupation',titleCase(m.guardian?.occupation)],['Last updated',displayDate(m.updated_at)]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value || 'Not recorded'}</dd></div>)}</dl>
       <div className="adm-profile-section"><h3>Relevant skills</h3><div className="adm-pills">{(m.interests || []).length ? m.interests.map(id=><span key={id}>{titleCase(skills.data?.find(s=>s.id===id)?.skill_name) || 'Skill unavailable'}</span>):<p>No skills recorded.</p>}{m.other_skills&&<span>Other: {titleCase(m.other_skills)}</span>}</div></div>
       <div className="adm-profile-section"><h3>Team assignments</h3><div className="adm-pills">{m.member_team_assignment?.length ? m.member_team_assignment.map(a=><span key={a.team_id}>{titleCase(a.production_team?.team_name) || 'Team unavailable'}</span>):<p>No team assignments yet.</p>}</div></div>
     </>}
@@ -38,6 +108,8 @@ export function MemberDetails({ id, onClose, onEdit }) {
 
 export function ConfirmMemberAction({ action, onClose, onApproved }) {
   const approve=useApproveMember(); const reject=useRejectMember(); const review=useReviewMember(); const active=useSetMemberActive();
+  const configQuery = useAppConfig();
+  const activeYear = configQuery.data?.ACADEMIC_YEAR || DEFAULT_ACADEMIC_YEAR;
   const [error,setError]=useState(''); const locked=useRef(false); const {addToast}=useToast();
   const busy=[approve,reject,review,active].some(m=>m.isPending);
   const labels={approve:'Approve application',reject:'Reject application',reopen:'Reopen application',deactivate:'Deactivate member',restore:'Restore member'};
@@ -49,7 +121,7 @@ export function ConfirmMemberAction({ action, onClose, onApproved }) {
     if(['deactivate','restore'].includes(action.type))await active.mutateAsync({id:action.member.id,is_active:action.type==='restore'});
     addToast({type:'success',message:action.type==='approve'?'Application approved. The member ID is ready for the paper receipt.':'Member record updated.'});if(action.type==='approve')onApproved(action.member.id);else onClose();
   }catch(err){setError(memberError(err));}finally{locked.current=false;}}
-  const feeMissing=action.type==='approve'&&!action.member.fee_paid_at;
+  const feeMissing=action.type==='approve'&&Boolean(action.member.form_number)&&!isFeePaid(action.member, activeYear);
   return <AdminDialog open onClose={onClose} busy={busy} title={labels[action.type]} description={titleCase(action.member.full_name)}>
     <p className="adm-confirm-copy">{hints[action.type]}</p>
     {action.type==='approve'&&<div className="adm-paper-note">

@@ -48,7 +48,7 @@
   .adm-mobile-breadcrumb a { color:inherit; display:inline-flex; align-items:center; min-height:44px; }
   .adm-mobile-breadcrumb>span { color:var(--admin-text); }
   .adm-header-island { gap:12px; min-height:58px; padding:0; border:0; background:transparent!important; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
-  .adm-mobile-brand { flex:1; max-width:232px; }
+  .adm-mobile-brand { flex:1; max-width:200px; }
   .adm-mobile-brand .adm-brand { position:relative; isolation:isolate; min-height:58px; padding:7px; gap:9px; width:100%; pointer-events:auto; clip-path:inset(0 0 0 0 round 30px); transition:clip-path 220ms var(--ease-out); }
   .adm-mobile-brand .adm-brand>span { width:44px; height:44px; border-radius:50%; background:transparent; }
   .adm-mobile-brand .adm-brand strong { font-size:18px; letter-spacing:-.6px; }

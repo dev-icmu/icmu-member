@@ -389,3 +389,82 @@
   margin: 0;
   font-size: 12px;
 }
+
+/* Dual Sheet Tabs (Paid vs Pending) */
+.adm-sheet-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: #060d09;
+  border: 1px solid #16261c;
+  border-radius: 14px;
+}
+
+.adm-sheet-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 140ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .adm-sheet-tab:hover {
+    color: #e4f9ec;
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.adm-sheet-tab:active {
+  transform: scale(0.98);
+}
+
+.adm-sheet-tab-active {
+  background: #14281c;
+  color: #a4f5c0;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.adm-sheet-tab-count {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-sheet-tab-active .adm-sheet-tab-count {
+  background: rgba(73, 201, 119, 0.22);
+  color: #a4f5c0;
+}
+
+.adm-pending-amount {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fde047;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-pending-date {
+  font-size: 10.5px;
+  color: #c29e46;
+  display: flex;
+  align-items: center;
+}
