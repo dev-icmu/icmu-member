@@ -15,6 +15,7 @@
 .adm-generic-modal>.adm-dialog-header { padding:24px 24px 0; margin-bottom:18px; flex:none; }
 .adm-generic-modal>div { overflow:auto; overscroll-behavior:contain; min-height:0; padding:0 24px 24px!important; }
 .adm-generic-modal .adm-dialog-footer { position:static; background:transparent; margin:24px 0 0; }
+.adm-application-layer.adm-generic-dialog-layer::backdrop { background:transparent; }
 html.admin-route .icmu-toast-stack { font-family:Montserrat,system-ui,sans-serif; }
 html.admin-route .icmu-toast-stack>li { background:var(--admin-raised); border-color:var(--admin-line); box-shadow:0 8px 30px #0005; }
 html.admin-route [data-slot=morphing-search-dialog] input { font-size:16px; }

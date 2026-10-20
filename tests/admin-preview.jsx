@@ -43,6 +43,14 @@ const membershipFees=members.filter((_,idx)=>idx!==31).map((m,idx)=>({
     }
   ]
 }));
+const previewWithdrawals=[{id:uuid(9500),method:'bank_transfer',amount:1250,bank_name:'People’s Bank',account_holder:'ICMU Media Unit',account_number:'123456789012',transfer_reference:'TXN-2401',cash_recipient:null,purpose:'Camera accessories',withdrawn_by_name:'Sample Admin',withdrawn_at:'2026-10-18T09:15:00Z',receipt_path:null}];
+function withdrawalPassbook(limit=100) {
+  const credits=membershipFees.flatMap(fee=>fee.fees.map((item,index)=>({id:`${fee.id}:${index+1}`,kind:'credit',happened_at:item.paid_date,amount:Number(item.fee_amount),person:members.find(member=>member.id===fee.member_id)?.full_name,detail:item.academic_year})));
+  const debits=previewWithdrawals.map(item=>({...item,kind:'debit',happened_at:item.withdrawn_at,actor_name:item.withdrawn_by_name}));
+  const all=[...credits,...debits].sort((a,b)=>a.happened_at.localeCompare(b.happened_at)||a.kind.localeCompare(b.kind)||a.id.localeCompare(b.id));
+  let balance=0;all.forEach(item=>{balance+=item.kind==='credit'?item.amount:-item.amount;item.balance_after=balance;});
+  return {received:credits.reduce((sum,item)=>sum+item.amount,0),withdrawn:debits.reduce((sum,item)=>sum+item.amount,0),available:balance,total_entries:all.length,entries:all.reverse().slice(0,limit)};
+}
 members.forEach((member)=>{
   const mf = membershipFees.find(f => f.member_id === member.id);
   member.membership_fee = mf ? [mf] : [];
@@ -54,6 +62,13 @@ window.fetch=async (input,init={})=>{
   if(url.origin===location.origin)return originalFetch(input,init);
   if(!url.pathname.startsWith('/rest/v1/'))return response({message:'External requests are disabled in this local fixture'},undefined,403);
   const path=url.pathname.split('/').at(-1);const body=init.body?JSON.parse(init.body):{};const method=init.method||'GET';
+  if(path==='admin_withdrawal_passbook')return response(withdrawalPassbook(body.p_limit));
+  if(path==='admin_record_withdrawal'){
+    const amount=Number(body.p_amount);const current=withdrawalPassbook();
+    if(amount>current.available)return response({message:'Amount exceeds the available balance. Refresh and try again.'},undefined,400);
+    const withdrawal={id:crypto.randomUUID(),method:body.p_method,amount,bank_name:body.p_bank_name,account_holder:body.p_account_holder,account_number:body.p_account_number,transfer_reference:body.p_transfer_reference,cash_recipient:body.p_cash_recipient,purpose:body.p_purpose,withdrawn_by_name:'Sample Admin',withdrawn_at:new Date().toISOString(),receipt_path:null};
+    previewWithdrawals.push(withdrawal);return response({withdrawal,available_balance:current.available-amount});
+  }
   if(path==='admin_membership_revenue'){
     const paid=members.filter(m=>((m.membership_fee || []).length > 0) && Number(m.batch_year) > 2008);
     const pendingNon2008=members.filter(m=>m.membership_status==='pending' && Number(m.batch_year) > 2008).length;

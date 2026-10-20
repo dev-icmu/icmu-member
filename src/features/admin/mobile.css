@@ -1,5 +1,5 @@
 /* Scope platform behavior to the workspace so public pages keep document scrolling. */
-html.admin-route, html.admin-route body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+html.admin-route, html.admin-route body { overflow-x:clip; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 html.admin-route { --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-drawer:cubic-bezier(0.32,0.72,0,1); }
 :is(.admin-workspace,.adm-dialog,.adm-application-layer,.adm-sidebar) :is(button,a,[role=button]) {
   touch-action: manipulation;
