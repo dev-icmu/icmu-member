@@ -43,7 +43,7 @@ const membershipFees=members.filter((_,idx)=>idx!==31).map((m,idx)=>({
     }
   ]
 }));
-const previewWithdrawals=[{id:uuid(9500),method:'bank_transfer',amount:1250,bank_name:'People’s Bank',account_holder:'ICMU Media Unit',account_number:'123456789012',transfer_reference:'TXN-2401',cash_recipient:null,purpose:'Camera accessories',withdrawn_by_name:'Sample Admin',withdrawn_at:'2026-10-18T09:15:00Z',receipt_path:null}];
+const previewWithdrawals=[{id:uuid(9500),method:'bank_transfer',amount:1250,transferred_to:'ICMU Media Unit',transfer_reference:'TXN-2401',cash_recipient:null,purpose:'Camera accessories',withdrawn_by_name:'Sample Admin',withdrawn_at:'2026-10-18T09:15:00Z',receipt_path:null}];
 function withdrawalPassbook(limit=100) {
   const credits=membershipFees.flatMap(fee=>fee.fees.map((item,index)=>({id:`${fee.id}:${index+1}`,kind:'credit',happened_at:item.paid_date,amount:Number(item.fee_amount),person:members.find(member=>member.id===fee.member_id)?.full_name,detail:item.academic_year})));
   const debits=previewWithdrawals.map(item=>({...item,kind:'debit',happened_at:item.withdrawn_at,actor_name:item.withdrawn_by_name}));
@@ -66,7 +66,7 @@ window.fetch=async (input,init={})=>{
   if(path==='admin_record_withdrawal'){
     const amount=Number(body.p_amount);const current=withdrawalPassbook();
     if(amount>current.available)return response({message:'Amount exceeds the available balance. Refresh and try again.'},undefined,400);
-    const withdrawal={id:crypto.randomUUID(),method:body.p_method,amount,bank_name:body.p_bank_name,account_holder:body.p_account_holder,account_number:body.p_account_number,transfer_reference:body.p_transfer_reference,cash_recipient:body.p_cash_recipient,purpose:body.p_purpose,withdrawn_by_name:'Sample Admin',withdrawn_at:new Date().toISOString(),receipt_path:null};
+    const withdrawal={id:crypto.randomUUID(),method:body.p_method,amount,transferred_to:body.p_transferred_to,transfer_reference:body.p_transfer_reference,cash_recipient:body.p_cash_recipient,purpose:body.p_purpose,withdrawn_by_name:'Sample Admin',withdrawn_at:new Date().toISOString(),receipt_path:null};
     previewWithdrawals.push(withdrawal);return response({withdrawal,available_balance:current.available-amount});
   }
   if(path==='admin_membership_revenue'){

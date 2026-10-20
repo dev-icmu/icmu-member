@@ -24,19 +24,31 @@ await db.exec(`
   insert into public.membership_fee(member_id,fees) values
     ('${memberId}', '[{"academic_year":"2026/2027","fee_amount":500,"paid_date":"2026-10-20T05:00:00Z"}]');
 `);
-const migration = readFileSync(new URL('../supabase/migrations/20261020125250_admin_withdrawals_passbook.sql', import.meta.url), 'utf8');
-await db.exec(migration);
+for (const migrationFile of [
+  '20261020125250_admin_withdrawals_passbook.sql',
+  '20261020143000_withdrawal_payout_methods.sql',
+  '20261020154529_withdrawal_transfer_recipient.sql',
+  '20261020155343_simplify_withdrawal_bank_details.sql',
+]) {
+  await db.exec(readFileSync(new URL(`../supabase/migrations/${migrationFile}`, import.meta.url), 'utf8'));
+}
 const initial = await db.query('select private.withdrawal_passbook(100) as statement');
 assert.equal(Number(initial.rows[0].statement.available), 500);
-const result = await db.query("select private.record_admin_withdrawal(200, 'Test Bank', 'Test Account Holder', '123456789', 'REF-1', 'Equipment') as record");
+const result = await db.query("select private.record_admin_withdrawal('bank_transfer', 200, 'Test Recipient', 'REF-1', null, 'Equipment') as record");
 const withdrawal = result.rows[0].record.withdrawal;
 assert.equal(withdrawal.withdrawn_by, adminId);
 assert.equal(withdrawal.withdrawn_by_name, 'Treasurer Admin');
+assert.equal(withdrawal.transferred_to, 'Test Recipient');
+assert.equal(withdrawal.account_holder, undefined);
+assert.equal(withdrawal.bank_name, undefined);
+assert.equal(withdrawal.account_number, undefined);
 assert.equal(Number(result.rows[0].record.available_balance), 300);
 const statement = await db.query('select private.withdrawal_passbook(100) as statement');
 assert.equal(Number(statement.rows[0].statement.available), 300);
 assert.equal(statement.rows[0].statement.entries.length, 2);
-await assert.rejects(db.query("select private.record_admin_withdrawal(301, 'Test Bank', 'Test Account Holder', '123456789', null, 'Equipment')"), /exceeds the available balance/);
+assert.equal(statement.rows[0].statement.entries[0].transferred_to, 'Test Recipient');
+await assert.rejects(db.query("select private.record_admin_withdrawal('bank_transfer', 1, '', null, null, 'Equipment')"), /who receives this transfer/);
+await assert.rejects(db.query("select private.record_admin_withdrawal('bank_transfer', 301, 'Test Recipient', null, null, 'Equipment')"), /exceeds the available balance/);
 await assert.rejects(db.query(`update public.admin_withdrawal set amount=1 where id='${withdrawal.id}'`), /cannot be changed/);
 await assert.rejects(db.query(`delete from public.admin_withdrawal where id='${withdrawal.id}'`), /cannot be deleted/);
 await assert.rejects(db.query(`update public.membership_fee set fees='[{"academic_year":"2026/2027","fee_amount":100,"paid_date":"2026-10-20T05:00:00Z"}]' where member_id='${memberId}'`), /leave recorded withdrawals above available funds/);
@@ -50,6 +62,6 @@ assert.equal(attached.rows[0].receipt.receipt_path, receiptPath);
 await assert.rejects(db.query('select private.attach_withdrawal_receipt($1, $2)', [withdrawal.id, receiptPath]), /already has a receipt/);
 await db.exec('create or replace function private.is_admin() returns boolean language sql as $$ select false $$;');
 await assert.rejects(db.query('select private.withdrawal_passbook(100)'), /Admin access required/);
-await assert.rejects(db.query("select private.record_admin_withdrawal(1, 'Test Bank', 'Test Account Holder', '123456789', null, 'Equipment')"), /Admin access required/);
+await assert.rejects(db.query("select private.record_admin_withdrawal('bank_transfer', 1, 'Test Recipient', null, null, 'Equipment')"), /Admin access required/);
 console.log('Withdrawal migration smoke test passed.');
 await db.close();

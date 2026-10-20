@@ -15,7 +15,7 @@ const bucket = 'admin-withdrawal-receipts';
 const maxReceiptSize = 10 * 1024 * 1024;
 const receiptExtensions = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const receiptMimeTypes = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-const emptyForm = { method: 'bank_transfer', amount: '', bank_name: '', account_holder: '', account_number: '', transfer_reference: '', cash_recipient: '', purpose: '' };
+const emptyForm = { method: 'bank_transfer', amount: '', transferred_to: '', transfer_reference: '', cash_recipient: '', purpose: '' };
 const money = value => Number(value || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatAmountInput = value => {
   const [integer = '', fraction] = value.split('.');
@@ -50,10 +50,6 @@ function getReceiptType(file) {
   return inferredMimeType
     ? { mimeType: inferredMimeType, extension: receiptExtensions[inferredMimeType] }
     : null;
-}
-
-function maskAccount(number) {
-  return number ? `•••• ${number.slice(-4)}` : 'Account';
 }
 
 export function WithdrawalsTab() {
@@ -146,6 +142,10 @@ export function WithdrawalsTab() {
       setError('The amount is greater than the available balance.');
       return false;
     }
+    if (form.method === 'bank_transfer' && form.transferred_to.trim().length < 2) {
+      setError('Enter who receives this transfer.');
+      return false;
+    }
     const finalPurpose = form.purpose.trim();
     if (!finalPurpose || finalPurpose.length < 3) {
       setError('Choose a purpose from the dropdown or enter custom text (at least 3 characters).');
@@ -180,9 +180,7 @@ export function WithdrawalsTab() {
       const { data, error: saveError } = await supabase.rpc('admin_record_withdrawal', {
         p_method: form.method,
         p_amount: amount,
-        p_bank_name: form.method === 'bank_transfer' ? (form.bank_name?.trim() || 'Bank Transfer') : null,
-        p_account_holder: form.method === 'bank_transfer' ? (form.account_holder?.trim() || adminName) : null,
-        p_account_number: form.method === 'bank_transfer' ? (form.account_number?.trim() || '0000') : null,
+        p_transferred_to: form.method === 'bank_transfer' ? form.transferred_to.trim() : null,
         p_transfer_reference: form.method === 'bank_transfer' ? (form.transfer_reference?.trim() || null) : null,
         p_cash_recipient: form.method === 'cash' ? (form.cash_recipient?.trim() || adminName) : null,
         p_purpose: form.purpose.trim(),
@@ -402,6 +400,39 @@ export function WithdrawalsTab() {
 
                 {step === 1 && (
                   <>
+                    {form.method === 'bank_transfer' && <div className="wd-payout-section">
+                      <div className="wd-payout-heading">
+                        <strong>Transfer details</strong>
+                        <span>Who receives this payment?</span>
+                      </div>
+                      <div className="wd-form-two wd-payout-fields">
+                        <label className="wd-field wd-payout-recipient" htmlFor="wd-transferred-to">
+                          <span>Transferred to</span>
+                          <input
+                            id="wd-transferred-to"
+                            type="text"
+                            autoComplete="name"
+                            value={form.transferred_to}
+                            onChange={event => change('transferred_to', event.target.value)}
+                            placeholder="Recipient or account holder"
+                            maxLength={150}
+                            required
+                          />
+                        </label>
+                        <label className="wd-field" htmlFor="wd-transfer-reference">
+                          <span>Transfer reference <small>Optional</small></span>
+                          <input
+                            id="wd-transfer-reference"
+                            type="text"
+                            autoComplete="off"
+                            value={form.transfer_reference}
+                            onChange={event => change('transfer_reference', event.target.value)}
+                            placeholder="Add after transferring"
+                            maxLength={100}
+                          />
+                        </label>
+                      </div>
+                    </div>}
                     {/* Fintech Digits Amount Card */}
                     <div
                       className="wd-amount-card"
@@ -645,10 +676,13 @@ export function WithdrawalsTab() {
                   </span>
                 </summary>
                 <div className="wd-entry-detail">
-                  <p>
-                    <span>{entry.method === 'cash' ? 'Cash handed to' : 'Method'}</span>
-                    <strong>{entry.method === 'cash' ? (nameWithInitials(entry.cash_recipient || entry.actor_name) || entry.cash_recipient || entry.actor_name) : 'Bank transfer'}</strong>
-                  </p>
+                  {entry.method === 'cash' ? <p>
+                    <span>Cash handed to</span>
+                    <strong>{nameWithInitials(entry.cash_recipient || entry.actor_name) || entry.cash_recipient || entry.actor_name}</strong>
+                  </p> : <>
+                    <p><span>Transferred to</span><strong>{entry.transferred_to || 'Not recorded'}</strong></p>
+                    {entry.transfer_reference && <p><span>Transfer reference</span><strong>{entry.transfer_reference}</strong></p>}
+                  </>}
                   <p>
                     <span>Recorded by</span>
                     <strong>{nameWithInitials(entry.actor_name) || entry.actor_name}</strong>

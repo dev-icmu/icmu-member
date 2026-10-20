@@ -32,6 +32,10 @@
 .wd-form { display:grid; gap:18px; }
 .wd-form-two { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .wd-field { display:grid; gap:8px; min-width:0; }
+.wd-payout-section { display:grid; gap:12px; padding:15px; border:1px solid var(--admin-line); border-radius:16px; background:#0a1710; }
+.wd-payout-heading { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.wd-payout-heading strong { color:#d8e9dc; font-size:12px; font-weight:600; }
+.wd-payout-heading span { color:var(--admin-muted); font-size:11px; }
 .wd-field>span { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#c8d9cd; font-size:12px; font-weight:600; }
 .wd-field small { font-size:11px; color:var(--admin-muted); font-weight:400; }
 .wd-field :is(input,textarea) { width:100%; min-width:0; min-height:48px; padding:12px 14px; border-radius:13px; border:1px solid var(--admin-control-line); background:var(--admin-inset); color:var(--admin-text); font-size:14px; outline:none; transition:border-color .15s ease,box-shadow .15s ease; }
@@ -306,6 +310,9 @@
   .wd-card { border-radius:22px; }
   .wd-form-card { padding:24px 20px; }
   .wd-form-two { grid-template-columns:1fr; gap:18px; }
+  .wd-payout-section { gap:12px; padding:13px; }
+  .wd-payout-heading { align-items:flex-start; flex-direction:column; gap:2px; }
+  .wd-payout-fields { gap:12px; }
   .wd-field :is(input,textarea) { font-size:16px; }
   .wd-amount-field input { min-height:82px; font-size:36px!important; }
   .wd-passbook-heading { padding:20px 20px 16px; }
